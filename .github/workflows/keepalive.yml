@@ -1,0 +1,36 @@
+name: Keep Supabase alive
+
+# Mantiene attivo il progetto Supabase del piano gratuito.
+# Supabase mette in pausa i progetti dopo 7 giorni senza attività:
+# questo workflow fa una piccola richiesta al database due volte a settimana,
+# così il contatore dei 7 giorni non arriva mai a zero.
+
+on:
+  schedule:
+    # lunedì e giovedì alle 06:00 UTC (07:00 in Italia d'inverno, 08:00 d'estate)
+    - cron: '0 6 * * 1,4'
+  workflow_dispatch:        # permette anche l'avvio manuale dal sito di GitHub
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Richiesta al database
+        run: |
+          CODE=$(curl -s -o /tmp/risposta.txt -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/gym_state?select=owner&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+
+          echo "Codice risposta: $CODE"
+
+          # 200 = tutto ok. 401/403 significano che il database ha risposto
+          # (quindi il progetto è sveglio) ma la chiave non ha accesso ai dati:
+          # va bene lo stesso, perché ciò che conta è che la richiesta arrivi.
+          if [ "$CODE" = "200" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+            echo "Progetto Supabase attivo."
+          else
+            echo "Il progetto non ha risposto correttamente:"
+            cat /tmp/risposta.txt
+            exit 1
+          fi
