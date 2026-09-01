@@ -18,7 +18,7 @@ jobs:
       - name: Richiesta al database
         run: |
           CODE=$(curl -s -o /tmp/risposta.txt -w "%{http_code}" \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/gym_state?select=owner&limit=1" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/keepalive?select=id&limit=1" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
 
