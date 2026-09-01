@@ -1,9 +1,13 @@
 name: Keep Supabase alive
 
 # Mantiene attivo il progetto Supabase del piano gratuito.
-# Supabase mette in pausa i progetti dopo 7 giorni senza attività:
-# questo workflow fa una piccola richiesta al database due volte a settimana,
-# così il contatore dei 7 giorni non arriva mai a zero.
+#
+# Fa due cose, due volte a settimana:
+#  1. contatta il database, così Supabase non mette in pausa il progetto
+#     (la pausa scatta dopo 7 giorni senza attività);
+#  2. scrive la data in un file nascosto e la registra nel repository, così
+#     GitHub non disattiva il workflow programmato (lo disattiva dopo 60
+#     giorni senza modifiche al repository).
 
 on:
   schedule:
@@ -11,14 +15,26 @@ on:
     - cron: '0 6 * * 1,4'
   workflow_dispatch:        # permette anche l'avvio manuale dal sito di GitHub
 
+permissions:
+  contents: write           # serve per scrivere il file della data
+
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
+      - name: Scarica il repository
+        uses: actions/checkout@v4
+
       - name: Richiesta al database
         run: |
+          URL="${{ secrets.SUPABASE_URL }}"
+          URL="${URL%/}"           # toglie l'eventuale barra finale
+          URL="${URL%/rest/v1}"    # toglie un eventuale /rest/v1 di troppo
+          URL="${URL%/}"
+          echo "Indirizzo usato: $URL/rest/v1/keepalive"
+
           CODE=$(curl -s -o /tmp/risposta.txt -w "%{http_code}" \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/keepalive?select=id&limit=1" \
+            "$URL/rest/v1/keepalive?select=id&limit=1" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
 
@@ -34,3 +50,14 @@ jobs:
             cat /tmp/risposta.txt
             exit 1
           fi
+
+      - name: Segna attività nel repository
+        run: |
+          mkdir -p .github
+          date -u +"Ultimo controllo: %Y-%m-%d %H:%M UTC" > .github/ultimo-ping.txt
+          git config user.name "keepalive"
+          git config user.email "keepalive@users.noreply.github.com"
+          git add .github/ultimo-ping.txt
+          # se la data non è cambiata non c'è nulla da registrare: va bene lo stesso
+          git commit -m "keepalive: aggiorno data ultimo controllo" || exit 0
+          git push
