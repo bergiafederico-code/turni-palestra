@@ -1199,7 +1199,7 @@ function pushBackup(dataObj) {
 }
 /* numero di versione: compare accanto al titolo, serve a capire al volo se il
    file aperto e' quello aggiornato */
-const VERSIONE = 'v1.7.1';
+const VERSIONE = 'v1.8';
 const DEVICE_NAME_KEY = 'palestra_turni_device_name';
 const ME_KEY = 'palestra_turni_me'; // collaboratore di questo dispositivo, per la vista "i miei turni"
 const SOLOMIE_KEY = 'palestra_turni_solo_mie'; // interruttore fra i propri turni e tutti
@@ -1562,7 +1562,7 @@ function fotoRimpicciolisci(file, latoMax) {
       const img = new Image();
       img.onerror = () => rej(new Error('immagine'));
       img.onload = () => {
-        const max = latoMax || 1400;
+        const max = latoMax || 2000;
         const k = Math.min(1, max / Math.max(img.width, img.height));
         const w = Math.round(img.width * k),
           h = Math.round(img.height * k);
@@ -1570,7 +1570,8 @@ function fotoRimpicciolisci(file, latoMax) {
         cv.width = w;
         cv.height = h;
         cv.getContext('2d').drawImage(img, 0, 0, w, h);
-        res(cv.toDataURL('image/jpeg', 0.72));
+        /* solo rimpicciolita, mai ritagliata: il sito la mostra intera */
+        res(cv.toDataURL('image/jpeg', 0.86));
       };
       img.src = fr.result;
     };
@@ -4638,6 +4639,63 @@ function App() {
      Manda la settimana di tracciatura al sito della palestra: una riga per
      settore nella tabella 'tracciature_sito' e le immagini nel deposito
      'tracciature'. Il sito legge da li', senza chiavi e senza server. */
+  /* le righe mandate al sito, per sede: {id, quando}. Servono solo a capire
+     cosa cancellare se una tracciatura programmata viene annullata. */
+  const segnaInviati = ids => {
+    if (!ids || !ids.length) return;
+    const ora = Date.now();
+    upd(nd => {
+      const vecchi = Array.isArray(nd.settings.sitoInviati) ? nd.settings.sitoInviati : [];
+      const mappa = {};
+      vecchi.forEach(x => {
+        if (x && x.id) mappa[x.id] = x;
+      });
+      ids.forEach(id => {
+        mappa[id] = {
+          id,
+          quando: ora
+        };
+      });
+      nd.settings = {
+        ...nd.settings,
+        sitoInviati: Object.keys(mappa).map(k => mappa[k])
+      };
+    });
+  };
+  const scordaInviati = ids => {
+    if (!ids || !ids.length) return;
+    upd(nd => {
+      const via = {};
+      ids.forEach(id => {
+        via[id] = 1;
+      });
+      nd.settings = {
+        ...nd.settings,
+        sitoInviati: (nd.settings.sitoInviati || []).filter(x => x && x.id && !via[x.id])
+      };
+    });
+  };
+  /* toglie dal sito le righe di tracciature annullate */
+  const cancellaDalSito = async ids => {
+    const c = clientRef.current;
+    if (!c || !session || !ids || !ids.length) return {
+      ok: false
+    };
+    try {
+      const r = await c.from('tracciature_sito').delete().in('id', ids);
+      if (r && r.error) throw r.error;
+      scordaInviati(ids);
+      return {
+        ok: true,
+        quanti: ids.length
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        perche: e && e.message ? e.message : String(e)
+      };
+    }
+  };
   const inviaAlSito = async pacchetto => {
     const c = clientRef.current;
     if (!c || !session) return {
@@ -4695,6 +4753,9 @@ function App() {
         });
         if (r.error) throw r.error;
       }
+      /* tengo da parte gli id mandati: se poi la giornata sparisce,
+         la riga va tolta anche dal sito */
+      segnaInviati(righe.map(r => r.id));
       return {
         ok: true,
         quanti: righe.length,
@@ -6161,6 +6222,7 @@ function App() {
     const da = imp.sitoAutoDa || oggi;
     const limite = isoOf(addDays(adesso, -SITO_RECUPERO));
     const dal = da > limite ? da : limite;
+    const fino = isoOf(addDays(adesso, SITO_AVANTI));
     const ora = Number(imp.sitoOra ?? SITO_ORA_DEF);
     const voci = vociPerIlSito({
       trackings: d.trackings,
@@ -6168,22 +6230,47 @@ function App() {
       collabs: q.collabs,
       settings: imp,
       dal,
-      al: oggi
+      al: fino
     }).filter(v => {
       /* formato vecchio senza righe: non si saprebbe dove segnare l'invio */
       if (!Array.isArray(v.giorno.rows)) return false;
+      if (firmaPerIlSito(v) === (v.riga.sitoFirma || '')) return false;
+      /* gia' programmata per i prossimi giorni: parte subito, come annuncio.
+         Quella di oggi o di ieri aspetta l'ora scelta, cosi' porta con se'
+         i blocchi e la foto. */
+      if (v.data > oggi) return true;
       const oraBuona = new Date(v.data + 'T00:00:00');
       oraBuona.setHours(ora, 0, 0, 0);
-      if (adesso < oraBuona) return false;
-      return firmaPerIlSito(v) !== (v.riga.sitoFirma || '');
+      return adesso >= oraBuona;
     });
-    if (!voci.length) return;
+    /* le tracciature annullate vanno tolte anche dal sito */
+    const esistenti = {};
+    (d.trackings || []).forEach(t => righeTracciatura(t).forEach(r => {
+      esistenti[t.id + '-' + r.id] = 1;
+    }));
+    const scadenza = Date.now() - SITO_MEMORIA * 86400000;
+    const inviati = Array.isArray(imp.sitoInviati) ? imp.sitoInviati : [];
+    const spariti = inviati.filter(x => x && x.id && !esistenti[x.id] && Number(x.quando || 0) > scadenza).map(x => x.id);
+    const scaduti = inviati.filter(x => x && x.id && Number(x.quando || 0) <= scadenza).map(x => x.id);
+    if (!voci.length && !spariti.length && !scaduti.length) return;
     st.corre = true;
     try {
+      if (scaduti.length) q.upd(nd => {
+        const via = {};
+        scaduti.forEach(id => {
+          via[id] = 1;
+        });
+        nd.settings = {
+          ...nd.settings,
+          sitoInviati: (nd.settings.sitoInviati || []).filter(x => x && x.id && !via[x.id])
+        };
+      });
+      if (spariti.length && q.cancella) await q.cancella(spariti);
+      if (!voci.length) return;
       const pac = await pacchettoPerIlSito({
         voci,
         nomeSede: q.nomeSede,
-        settimana: dal + '_' + oggi,
+        settimana: dal + '_' + fino,
         settings: imp
       });
       const r = await q.invia(pac);
@@ -6493,6 +6580,7 @@ function App() {
     prova,
     sessione: !!session,
     invia: inviaAlSito,
+    cancella: cancellaDalSito,
     upd
   };
 
@@ -9553,14 +9641,16 @@ async function pacchettoPerIlSito({ voci, nomeSede, settimana, settings }) {
       blocchi: v.blocchi,
       foto: foto || '',
       fotoAltrove: !!(v.fotoId && !foto),
-      scheda: schedaSettore({
+      /* senza blocchi non c'e' niente da disegnare: e' il caso della
+         tracciatura programmata, che arriva al sito come annuncio */
+      scheda: (v.blocchi || []).length ? schedaSettore({
         settore: v.settore,
         data: v.data,
         blocchi: Array.isArray(v.riga.blocchi) ? v.riga.blocchi : [],
         tracciatori: v.tracciatori,
         sede: nomeSede,
         settings
-      })
+      }) : ''
     });
   }
   return {
@@ -9577,6 +9667,10 @@ function firmaPerIlSito(v) {
 const SITO_ORA_DEF = 20;
 /* fin dove si torna indietro quando l'app non era aperta all'ora giusta */
 const SITO_RECUPERO = 14;
+/* quanto avanti si annunciano le tracciature gia' programmate */
+const SITO_AVANTI = 7;
+/* dopo quanto si smette di tenere d'occhio una riga gia' mandata */
+const SITO_MEMORIA = 60;
 const SQL_SITO_BASE = "-- Da eseguire una volta sola in Supabase (SQL editor).\n-- Copia tutto e premi Run: si puo' rieseguire anche piu' volte senza danni.\n\n-- 1) la tabella che il sito legge\ncreate table if not exists tracciature_sito (\n  id text primary key,\n  sede text,\n  settore text,\n  tipo text,\n  data date,\n  settimana text,\n  tracciatori jsonb,\n  blocchi jsonb,\n  foto_url text,\n  scheda_url text,\n  aggiornato timestamptz\n);\nalter table tracciature_sito enable row level security;\n\n-- 2) il sito legge, scrive solo il gestionale (questo account)\ndrop policy if exists \"lettura pubblica\" on tracciature_sito;\ncreate policy \"lettura pubblica\" on tracciature_sito\n  for select to anon, authenticated using (true);\ndrop policy if exists \"scrittura di chi entra\" on tracciature_sito;\ndrop policy if exists \"scrive solo il gestionale\" on tracciature_sito;\ncreate policy \"scrive solo il gestionale\" on tracciature_sito\n  for all to authenticated\n  using (auth.uid()::text = '@UID@')\n  with check (auth.uid()::text = '@UID@');\n\n-- 3) il deposito pubblico delle immagini\ninsert into storage.buckets (id, name, public)\n  values ('tracciature', 'tracciature', true)\n  on conflict (id) do update set public = true;\n\n-- 4) le foto le vedono tutti, le carica solo il gestionale\ndrop policy if exists \"immagini lettura pubblica\" on storage.objects;\ncreate policy \"immagini lettura pubblica\" on storage.objects\n  for select to anon, authenticated\n  using (bucket_id = 'tracciature');\ndrop policy if exists \"immagini carica il gestionale\" on storage.objects;\ncreate policy \"immagini carica il gestionale\" on storage.objects\n  for insert to authenticated\n  with check (bucket_id = 'tracciature' and auth.uid()::text = '@UID@');\ndrop policy if exists \"immagini aggiorna il gestionale\" on storage.objects;\ncreate policy \"immagini aggiorna il gestionale\" on storage.objects\n  for update to authenticated\n  using (bucket_id = 'tracciature' and auth.uid()::text = '@UID@')\n  with check (bucket_id = 'tracciature' and auth.uid()::text = '@UID@');\ndrop policy if exists \"immagini cancella il gestionale\" on storage.objects;\ncreate policy \"immagini cancella il gestionale\" on storage.objects\n  for delete to authenticated\n  using (bucket_id = 'tracciature' and auth.uid()::text = '@UID@');";
 const UID_SEGNAPOSTO = '<il-tuo-user-id>';
 function sqlSito(uid) {
@@ -9816,7 +9910,7 @@ function SettoreModal({ data, settore, giornata, riga, collabs, canEdit, setTrac
     setCaricando(true);
     setMsg('');
     try {
-      const url = await fotoRimpicciolisci(file, 1400);
+      const url = await fotoRimpicciolisci(file, 2000);
       const chiave = riga.id + '-' + Date.now();
       await fotoSalva(chiave, url);
       if (chiaveFoto) fotoScorda(chiaveFoto);
