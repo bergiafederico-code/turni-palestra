@@ -1208,7 +1208,7 @@ function pushBackup(dataObj) {
 }
 /* numero di versione: compare accanto al titolo, serve a capire al volo se il
    file aperto e' quello aggiornato */
-const VERSIONE = 'v2.7';
+const VERSIONE = 'v2.8';
 const DEVICE_NAME_KEY = 'palestra_turni_device_name';
 const ME_KEY = 'palestra_turni_me'; // collaboratore di questo dispositivo, per la vista "i miei turni"
 const SOLOMIE_KEY = 'palestra_turni_solo_mie'; // interruttore fra i propri turni e tutti
@@ -10313,8 +10313,10 @@ const SITO_AVANTI = 7;
 /* dopo quanto si smette di tenere d'occhio una riga gia' mandata */
 const SITO_MEMORIA = 60;
 /* ---- Posti per il sito: prove gratuite e cicli del corso adulti ----
-   Le prove nascono dai corsi del gestionale: basta dire quanti posti si
-   accettano. Quello che ha posti sopra zero finisce in offerte_sito. */
+   Le prove nascono dai corsi del gestionale e i cicli dal calendario dei
+   corsi adulti: qui si dice soltanto quanti posti si accettano sul sito.
+   I posti delle prove stanno su tre livelli (tutti i corsi, un corso, una
+   giornata): vince il piu' preciso, la casella vuota eredita, 0 chiude. */
 function PostiPanel({
   data,
   upd,
@@ -10329,13 +10331,19 @@ function PostiPanel({
   const [esito, setEsito] = useState('');
   const [liberi, setLiberi] = useState({});
   const [impostazioni, setImpostazioni] = useState(false);
-  const posti = data.settings && data.settings.offertePosti || {};
-  const cicli = data.settings && data.settings.cicliAdulti || [];
+  const pp = postiProva(data.settings);
+  const cicliVecchi = data.settings && data.settings.cicliAdulti || [];
   const prove = proveDisponibili({
     data,
     actById,
     nomeSede,
     giorni: OFF_GIORNI
+  });
+  const cicli = cicliAdultiSito({
+    data,
+    actById,
+    nomeSede,
+    giorni: CICLI_AVANTI
   });
   const voci = vociOfferte({
     data,
@@ -10354,17 +10362,34 @@ function PostiPanel({
       vivo = false;
     };
   }, [cloudPronto, voci.length]);
-  const setPosti = (id, n) => upd(nd => {
-    const o = {
-      ...(nd.settings.offertePosti && typeof nd.settings.offertePosti === 'object' ? nd.settings.offertePosti : {})
+
+  /* la casella vuota vuol dire «eredita»: la chiave sparisce */
+  const leggiCasella = v => {
+    const s = String(v == null ? '' : v).trim();
+    if (s === '') return null;
+    const n = parseInt(s, 10);
+    return isNaN(n) ? null : Math.max(0, Math.min(50, n));
+  };
+  const setTutti = v => upd(nd => {
+    const s = {
+      ...nd.settings
     };
-    if (n > 0) o[id] = n;else delete o[id];
+    if (v == null) delete s.postiProvaTutti;else s.postiProvaTutti = v;
+    nd.settings = s;
+  });
+  const setMappa = (chiave, id, v) => upd(nd => {
+    const o = {
+      ...(nd.settings[chiave] && typeof nd.settings[chiave] === 'object' ? nd.settings[chiave] : {})
+    };
+    if (v == null) delete o[id];else o[id] = v;
     nd.settings = {
       ...nd.settings,
-      offertePosti: o
+      [chiave]: o
     };
   });
-  const setCiclo = (id, patch) => upd(nd => {
+  const setCorso = (cid, v) => setMappa('postiProvaCorso', cid, v);
+  const setGiorno = (id, v) => setMappa('offertePosti', id, v);
+  const setCicloVecchio = (id, patch) => upd(nd => {
     nd.settings = {
       ...nd.settings,
       cicliAdulti: (nd.settings.cicliAdulti || []).map(c => c.id === id ? {
@@ -10373,20 +10398,7 @@ function PostiPanel({
       } : c)
     };
   });
-  const addCiclo = () => upd(nd => {
-    nd.settings = {
-      ...nd.settings,
-      cicliAdulti: [...(nd.settings.cicliAdulti || []), {
-        id: 'corso-' + uid(),
-        titolo: 'Corso base',
-        data: isoOf(addDays(new Date(), 14)),
-        orario: '',
-        posti: 8,
-        attivo: true
-      }]
-    };
-  });
-  const delCiclo = id => upd(nd => {
+  const delCicloVecchio = id => upd(nd => {
     nd.settings = {
       ...nd.settings,
       cicliAdulti: (nd.settings.cicliAdulti || []).filter(c => c.id !== id)
@@ -10403,6 +10415,35 @@ function PostiPanel({
     day: 'numeric',
     month: 'short'
   });
+
+  /* le prove raggruppate per corso, nell'ordine in cui cadono */
+  const gruppi = [];
+  prove.forEach(p => {
+    let g = gruppi.find(x => x.corsoId === p.corsoId);
+    if (!g) {
+      g = {
+        corsoId: p.corsoId,
+        titolo: p.titolo,
+        anni: p.anno_da ? p.anno_da + '–' + p.anno_a : '',
+        righe: []
+      };
+      gruppi.push(g);
+    }
+    g.righe.push(p);
+  });
+
+  /* quanti posti si vedono, e da dove arrivano */
+  const statoSito = (p, n) => {
+    if (!(n > 0)) return /*#__PURE__*/React.createElement("span", {
+      className: "muted"
+    }, "chiusa");
+    const lib = liberi[p.id];
+    return lib == null ? 'aperta · ' + n + (n === 1 ? ' posto' : ' posti') : lib + (lib === 1 ? ' posto libero' : ' posti liberi');
+  };
+  const donde = p => {
+    const d = dondeIPosti(p, pp);
+    return d === 'corso' ? 'dal corso' : d === 'tutti' ? 'da tutti i corsi' : '';
+  };
   return /*#__PURE__*/React.createElement("div", {
     className: "panel"
   }, /*#__PURE__*/React.createElement("div", {
@@ -10444,7 +10485,7 @@ function PostiPanel({
     style: {
       marginBottom: 6
     }
-  }, "Da eseguire una volta sola, nel progetto in regione UE: crea le offerte, le prenotazioni, il conto dei posti liberi e il blocco che impedisce di prenotare oltre i posti."), /*#__PURE__*/React.createElement("textarea", {
+  }, "Questo è il testo da incollare una volta sola nell’editor SQL di Supabase: crea le offerte, le prenotazioni, il conto dei posti liberi e il blocco che impedisce di prenotare oltre i posti. Se le tabelle ci sono già (sono state create il 24/11/2026) qui non c’è niente da fare: resta solo per il giorno in cui il progetto andasse rifatto da capo. Non si usa per il lavoro di tutti i giorni."), /*#__PURE__*/React.createElement("textarea", {
     className: "txt",
     readOnly: true,
     rows: 10,
@@ -10455,8 +10496,47 @@ function PostiPanel({
     },
     value: sqlPrenotazioni(cloudUid)
   }))), /*#__PURE__*/React.createElement("div", {
+    className: "years-box",
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "years-body"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "lesson-row",
+    style: {
+      gap: 8,
+      alignItems: 'center',
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "field-label",
+    style: {
+      margin: 0
+    }
+  }, "Posti di prova su tutti i corsi"), /*#__PURE__*/React.createElement("input", {
+    className: "txt rate",
+    type: "number",
+    min: "0",
+    max: "50",
+    placeholder: "—",
+    disabled: !canEdit,
+    value: pp.tutti == null ? '' : pp.tutti,
+    onChange: e => setTutti(leggiCasella(e.target.value))
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "tiny muted",
+    style: {
+      flex: 1,
+      minWidth: 220
+    }
+  }, pp.tutti == null ? 'Vuoto: nessuna prova si apre da sola, si aprono una per una qui sotto.' : pp.tutti === 0 ? 'Zero: tutte chiuse, a parte quelle a cui metti un numero tu.' : 'Ogni giornata dei prossimi ' + OFF_GIORNI + ' giorni accetta ' + pp.tutti + (pp.tutti === 1 ? ' prenotazione' : ' prenotazioni') + ', salvo dove scrivi un numero diverso.')))), /*#__PURE__*/React.createElement("div", {
     className: "field-label"
-  }, "Prove gratuite dei corsi ragazzi · prossimi ", OFF_GIORNI, " giorni"), prove.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, "Prove gratuite dei corsi ragazzi · prossimi ", OFF_GIORNI, " giorni"), /*#__PURE__*/React.createElement("div", {
+    className: "tiny muted",
+    style: {
+      marginBottom: 8
+    }
+  }, "Il numero sulla riga del corso vale per tutte le sue giornate; quello sulla giornata vale solo per quella. Casella vuota = come il livello sopra. Zero = chiusa."), prove.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "empty"
   }, "Nessun turno nei prossimi giorni: i corsi ragazzi si creano nella pagina Corsi.") : /*#__PURE__*/React.createElement("div", {
     className: "roster-scroll"
@@ -10464,41 +10544,113 @@ function PostiPanel({
     className: "rep"
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Giorno"), /*#__PURE__*/React.createElement("th", null, "Turno"), /*#__PURE__*/React.createElement("th", null, "Orario"), /*#__PURE__*/React.createElement("th", null, "Anni"), /*#__PURE__*/React.createElement("th", {
     className: "num"
-  }, "Posti"), /*#__PURE__*/React.createElement("th", null, "Sul sito"))), /*#__PURE__*/React.createElement("tbody", null, prove.map(p => {
-    const n = Number(posti[p.id] || 0);
-    const lib = liberi[p.id];
-    return /*#__PURE__*/React.createElement("tr", {
-      key: p.id
-    }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("b", null, giorno(p.data))), /*#__PURE__*/React.createElement("td", null, p.titolo), /*#__PURE__*/React.createElement("td", {
-      className: "tiny"
-    }, p.orario), /*#__PURE__*/React.createElement("td", {
-      className: "tiny"
-    }, p.anno_da ? p.anno_da + '–' + p.anno_a : '—'), /*#__PURE__*/React.createElement("td", {
+  }, "Posti"), /*#__PURE__*/React.createElement("th", null, "Sul sito"))), /*#__PURE__*/React.createElement("tbody", null, gruppi.map(g => {
+    const nCorso = pp.corsi[g.corsoId];
+    return /*#__PURE__*/React.createElement(React.Fragment, {
+      key: g.corsoId
+    }, /*#__PURE__*/React.createElement("tr", {
+      className: "tot"
+    }, /*#__PURE__*/React.createElement("td", {
+      colSpan: 4
+    }, /*#__PURE__*/React.createElement("b", null, g.titolo), /*#__PURE__*/React.createElement("span", {
+      className: "tiny muted"
+    }, ' · ' + g.righe.length + (g.righe.length === 1 ? ' giornata' : ' giornate') + (g.anni ? ' · anni ' + g.anni : ''))), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, /*#__PURE__*/React.createElement("input", {
       className: "txt rate",
       type: "number",
       min: "0",
       max: "50",
-      value: n,
       disabled: !canEdit,
-      onChange: e => setPosti(p.id, Math.max(0, Math.min(50, parseInt(e.target.value, 10) || 0)))
+      placeholder: pp.tutti == null ? '—' : String(pp.tutti),
+      value: nCorso == null ? '' : nCorso,
+      onChange: e => setCorso(g.corsoId, leggiCasella(e.target.value))
     })), /*#__PURE__*/React.createElement("td", {
-      className: "tiny"
-    }, n > 0 ? lib == null ? 'aperta' : lib + (lib === 1 ? ' posto libero' : ' posti liberi') : /*#__PURE__*/React.createElement("span", {
-      className: "muted"
-    }, "chiusa")));
+      className: "tiny muted"
+    }, "posti del corso")), g.righe.map(p => {
+      const esplicito = pp.giorni[p.id];
+      const n = postiDiUnaProva(p, pp);
+      const da = donde(p);
+      return /*#__PURE__*/React.createElement("tr", {
+        key: p.id
+      }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("b", null, giorno(p.data))), /*#__PURE__*/React.createElement("td", {
+        className: "tiny muted"
+      }, p.titolo), /*#__PURE__*/React.createElement("td", {
+        className: "tiny"
+      }, p.orario), /*#__PURE__*/React.createElement("td", {
+        className: "tiny"
+      }, p.anno_da ? p.anno_da + '–' + p.anno_a : '—'), /*#__PURE__*/React.createElement("td", {
+        className: "num"
+      }, /*#__PURE__*/React.createElement("input", {
+        className: "txt rate",
+        type: "number",
+        min: "0",
+        max: "50",
+        disabled: !canEdit,
+        placeholder: String(n),
+        value: esplicito == null ? '' : esplicito,
+        onChange: e => setGiorno(p.id, leggiCasella(e.target.value))
+      })), /*#__PURE__*/React.createElement("td", {
+        className: "tiny"
+      }, statoSito(p, n), n > 0 && da ? /*#__PURE__*/React.createElement("div", {
+        className: "muted"
+      }, da) : null));
+    }));
   })))), /*#__PURE__*/React.createElement("div", {
     className: "field-label",
     style: {
       marginTop: 16
     }
-  }, "Cicli del corso adulti"), /*#__PURE__*/React.createElement("div", {
+  }, "Cicli del corso adulti · prossimi ", CICLI_AVANTI, " giorni"), /*#__PURE__*/React.createElement("div", {
     className: "tiny muted",
     style: {
       marginBottom: 8
     }
-  }, "Ogni ciclo è una partenza: titolo, data della prima lezione, orario e posti."), cicli.map(c => /*#__PURE__*/React.createElement("div", {
+  }, "I cicli si scrivono una volta sola in ", /*#__PURE__*/React.createElement("b", null, "Corsi → Corsi adulti"), ", con lezioni e istruttori: qui compaiono da soli e si dice solo quanti posti si accettano sul sito. Zero o vuoto = non va sul sito."), cicli.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "empty"
+  }, "Nessun ciclo in arrivo: la prima lezione si mette in Corsi adulti.") : /*#__PURE__*/React.createElement("div", {
+    className: "roster-scroll"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "rep"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Prima lezione"), /*#__PURE__*/React.createElement("th", null, "Ciclo"), /*#__PURE__*/React.createElement("th", null, "Orario"), /*#__PURE__*/React.createElement("th", null, "Lezioni"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Posti"), /*#__PURE__*/React.createElement("th", null, "Sul sito"))), /*#__PURE__*/React.createElement("tbody", null, cicli.map(c => {
+    const n = pp.giorni[c.id] == null ? 0 : pp.giorni[c.id];
+    return /*#__PURE__*/React.createElement("tr", {
+      key: c.id
+    }, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("b", null, giorno(c.data))), /*#__PURE__*/React.createElement("td", null, c.titolo), /*#__PURE__*/React.createElement("td", {
+      className: "tiny"
+    }, c.orario), /*#__PURE__*/React.createElement("td", {
+      className: "tiny"
+    }, c.lezioni), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, /*#__PURE__*/React.createElement("input", {
+      className: "txt rate",
+      type: "number",
+      min: "0",
+      max: "50",
+      disabled: !canEdit,
+      placeholder: "—",
+      value: pp.giorni[c.id] == null ? '' : pp.giorni[c.id],
+      onChange: e => setGiorno(c.id, leggiCasella(e.target.value))
+    })), /*#__PURE__*/React.createElement("td", {
+      className: "tiny"
+    }, statoSito(c, n)));
+  })))), cicliVecchi.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "years-box",
+    style: {
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "years-body"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "field-label"
+  }, "Cicli scritti a mano qui (vecchio modo)"), /*#__PURE__*/React.createElement("div", {
+    className: "tiny muted",
+    style: {
+      marginBottom: 8
+    }
+  }, "Questi non stanno nel calendario dei corsi adulti. Vanno ancora sul sito finché sono accesi: quando li hai rifatti in Corsi adulti, togli la spunta o cancellali col cestino."), cicliVecchi.map(c => /*#__PURE__*/React.createElement("div", {
     key: c.id,
     className: "list-row"
   }, /*#__PURE__*/React.createElement("label", {
@@ -10512,68 +10664,23 @@ function PostiPanel({
     type: "checkbox",
     checked: !!c.attivo,
     disabled: !canEdit,
-    onChange: e => setCiclo(c.id, {
+    onChange: e => setCicloVecchio(c.id, {
       attivo: e.target.checked
     })
-  }), "sul sito"), /*#__PURE__*/React.createElement("input", {
-    className: "txt",
+  }), "sul sito"), /*#__PURE__*/React.createElement("span", {
     style: {
       flex: 1,
       minWidth: 140
-    },
-    placeholder: "Titolo del ciclo",
-    disabled: !canEdit,
-    value: c.titolo || '',
-    onChange: e => setCiclo(c.id, {
-      titolo: e.target.value
-    })
-  }), /*#__PURE__*/React.createElement("input", {
-    className: "txt",
-    type: "date",
-    style: {
-      width: 150
-    },
-    value: c.data || '',
-    disabled: !canEdit,
-    onChange: e => setCiclo(c.id, {
-      data: e.target.value
-    })
-  }), /*#__PURE__*/React.createElement("input", {
-    className: "txt",
-    style: {
-      width: 160
-    },
-    placeholder: "martedì 20:00 – 21:30",
-    disabled: !canEdit,
-    value: c.orario || '',
-    onChange: e => setCiclo(c.id, {
-      orario: e.target.value
-    })
-  }), /*#__PURE__*/React.createElement("input", {
-    className: "txt rate",
-    type: "number",
-    min: "0",
-    max: "50",
-    value: Number(c.posti || 0),
-    disabled: !canEdit,
-    onChange: e => setCiclo(c.id, {
-      posti: Math.max(0, Math.min(50, parseInt(e.target.value, 10) || 0))
-    })
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "tiny muted",
-    style: {
-      minWidth: 86
     }
-  }, liberi[c.id] == null ? '' : liberi[c.id] + (liberi[c.id] === 1 ? ' libero' : ' liberi')), canEdit && /*#__PURE__*/React.createElement("button", {
+  }, c.titolo || 'Corso adulti'), /*#__PURE__*/React.createElement("span", {
+    className: "tiny muted"
+  }, c.data ? giorno(c.data) : '', c.orario ? ' · ' + c.orario : ''), /*#__PURE__*/React.createElement("span", {
+    className: "tiny muted"
+  }, Number(c.posti || 0), Number(c.posti) === 1 ? ' posto' : ' posti'), canEdit && /*#__PURE__*/React.createElement("button", {
     className: "iconbtn del",
     title: "Togli questo ciclo",
-    onClick: () => delCiclo(c.id)
-  }, I.trash))), canEdit && /*#__PURE__*/React.createElement("button", {
-    className: "btn sm",
-    onClick: addCiclo
-  }, I.plus, " Aggiungi un ciclo"), !canEdit && cicli.length === 0 && /*#__PURE__*/React.createElement("div", {
-    className: "tiny muted"
-  }, "Nessun ciclo aperto.")));
+    onClick: () => delCicloVecchio(c.id)
+  }, I.trash)))))));
 }
 
 /* ---- Prenotazioni arrivate dal sito ---- */
@@ -10964,7 +11071,6 @@ function PrenotazioniPanel({
     className: "tiny muted"
   }, "Occupa un posto come quelle che arrivano dal sito."))))));
 }
-
 /* ---- la pagina delle pre-iscrizioni (segreteria) ----
    Le righe stanno solo su Supabase: qui si leggono, si stampano e si segnano.
    I loghi per la stampa restano nel browser di questo dispositivo. */
@@ -11199,7 +11305,7 @@ function PreiscrizioniPanel({
     style: {
       marginBottom: 6
     }
-  }, "Da eseguire una volta sola, nel progetto in regione UE. È già su misura dell’account collegato."), /*#__PURE__*/React.createElement("textarea", {
+  }, "Questo è il testo da incollare una volta sola nell’editor SQL di Supabase per creare la tabella: è già su misura dell’account collegato. Se la tabella c’è già, qui non c’è niente da fare — resta per il giorno in cui il progetto andasse rifatto. In fondo ci sono le due righe che allargano i tipi di modulo a quattro."), /*#__PURE__*/React.createElement("textarea", {
     className: "txt",
     readOnly: true,
     rows: 10,
@@ -11333,10 +11439,43 @@ const SQL_PREN_BASE = "-- Prenotazioni dal sito: da eseguire una volta in Supaba
 function sqlPrenotazioni(uid) {
   return SQL_PREN_BASE.split('@UID@').join(uid || UID_SEGNAPOSTO);
 }
+
 /* ---- posti per il sito: prove gratuite e cicli del corso adulti ----
    Le prove nascono dai corsi veri del gestionale: per ogni turno si guarda
    quando cade nei prossimi giorni, saltando chiusure e sospensioni. */
 const OFF_GIORNI = 14;
+/* i cicli del corso adulti si prendono dal calendario dei corsi adulti:
+   quanto avanti nel tempo si guarda */
+const CICLI_AVANTI = 180;
+
+/* I posti delle prove stanno su tre livelli: uno per tutti i corsi, uno per
+   un corso solo, uno per una singola giornata. Vince sempre il piu' preciso.
+   Casella vuota = eredita dal livello sopra; 0 = chiusa per davvero. */
+function postiProva(settings) {
+  const s = settings || {};
+  const num = v => v === '' || v == null || isNaN(Number(v)) ? null : Math.max(0, Math.min(50, Math.round(Number(v))));
+  const mappa = o => {
+    const out = {};
+    if (o && typeof o === 'object') Object.keys(o).forEach(k => {
+      const n = num(o[k]);
+      if (n != null) out[k] = n;
+    });
+    return out;
+  };
+  return {
+    tutti: num(s.postiProvaTutti),
+    corsi: mappa(s.postiProvaCorso),
+    giorni: mappa(s.offertePosti)
+  };
+}
+const postiDiUnaProva = (p, pp) => {
+  if (pp.giorni[p.id] != null) return pp.giorni[p.id];
+  if (p.corsoId && pp.corsi[p.corsoId] != null) return pp.corsi[p.corsoId];
+  return pp.tutti == null ? 0 : pp.tutti;
+};
+/* da quale livello arriva il numero: serve solo per scriverlo nella pagina */
+const dondeIPosti = (p, pp) => pp.giorni[p.id] != null ? 'giornata' : p.corsoId && pp.corsi[p.corsoId] != null ? 'corso' : pp.tutti != null ? 'tutti' : 'niente';
+
 function proveDisponibili({ data, actById, nomeSede, giorni }) {
   const out = [];
   const oggi = new Date();
@@ -11358,6 +11497,7 @@ function proveDisponibili({ data, actById, nomeSede, giorni }) {
       const fine = cfg.end || co.end || '';
       out.push({
         id: 'prova-' + co.id + '-' + isoOf(d),
+        corsoId: co.id,
         tipo: 'prova',
         sede: sedeSito(nomeSede),
         titolo: ((att.name || 'Turno') + (co.name ? ' ' + co.name : '')).trim(),
@@ -11370,14 +11510,55 @@ function proveDisponibili({ data, actById, nomeSede, giorni }) {
   });
   return out.sort((a, b) => a.data.localeCompare(b.data) || a.titolo.localeCompare(b.titolo));
 }
-/* le righe che vanno davvero pubblicate: prove con posti + cicli adulti accesi */
+/* i cicli del corso adulti, presi dal calendario dei corsi adulti: uno per
+   corso, con la data della prima lezione che deve ancora venire. */
+function cicliAdultiSito({ data, actById, nomeSede, giorni }) {
+  const oggi = isoOf(new Date());
+  const fino = isoOf(addDays(new Date(), giorni || CICLI_AVANTI));
+  const out = [];
+  (data.groupCourses || []).forEach(co => {
+    if (co.category !== 'adulti') return;
+    const lez = (co.lessons || []).filter(l => l && l.date).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    if (!lez.length) return;
+    const prima = lez[0];
+    if (prima.date < oggi || prima.date > fino) return;
+    const att = actById[co.activityId] || {};
+    const d = parseISO(prima.date);
+    const dow = (d.getDay() + 6) % 7;
+    out.push({
+      id: 'corso-' + co.id,
+      corsoId: co.id,
+      tipo: 'corso',
+      sede: sedeSito(nomeSede),
+      titolo: ((att.name || 'Corso adulti') + (co.autoName !== true && co.name ? ' ' + co.name : '')).trim(),
+      anno_da: null,
+      anno_a: null,
+      data: prima.date,
+      orario: DAYS[dow].toLowerCase() + (prima.start ? ' ' + prima.start + ' \u2013 ' + (prima.end || '') : ''),
+      lezioni: lez.length
+    });
+  });
+  return out.sort((a, b) => a.data.localeCompare(b.data) || a.titolo.localeCompare(b.titolo));
+}
+/* le righe che vanno davvero pubblicate: prove con posti + cicli adulti accesi.
+   Sono le righe che finiscono in offerte_sito, quindi niente campi in piu'. */
+const soloColonneSito = r => ({
+  id: r.id, tipo: r.tipo, sede: r.sede, titolo: r.titolo,
+  anno_da: r.anno_da, anno_a: r.anno_a, data: r.data, orario: r.orario,
+  posti: r.posti, attiva: true
+});
 function vociOfferte({ data, actById, nomeSede, giorni }) {
-  const posti = data.settings && data.settings.offertePosti || {};
-  const out = proveDisponibili({ data, actById, nomeSede, giorni }).filter(p => Number(posti[p.id] || 0) > 0).map(p => ({
-    ...p,
-    posti: Number(posti[p.id]),
-    attiva: true
-  }));
+  const pp = postiProva(data.settings);
+  const out = proveDisponibili({ data, actById, nomeSede, giorni })
+    .map(p => ({ ...p, posti: postiDiUnaProva(p, pp) }))
+    .filter(p => p.posti > 0)
+    .map(soloColonneSito);
+  cicliAdultiSito({ data, actById, nomeSede }).forEach(c => {
+    const n = pp.giorni[c.id];
+    if (!(n > 0)) return;
+    out.push(soloColonneSito({ ...c, posti: n }));
+  });
+  /* i cicli scritti a mano nella vecchia pagina: restano buoni finche' ci sono */
   (data.settings && data.settings.cicliAdulti || []).forEach(c => {
     if (!c.attivo || !c.data || !(Number(c.posti) > 0)) return;
     const oggi = isoOf(new Date());
