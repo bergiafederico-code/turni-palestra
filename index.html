@@ -1208,7 +1208,7 @@ function pushBackup(dataObj) {
 }
 /* numero di versione: compare accanto al titolo, serve a capire al volo se il
    file aperto e' quello aggiornato */
-const VERSIONE = 'v2.5';
+const VERSIONE = 'v2.7';
 const DEVICE_NAME_KEY = 'palestra_turni_device_name';
 const ME_KEY = 'palestra_turni_me'; // collaboratore di questo dispositivo, per la vista "i miei turni"
 const SOLOMIE_KEY = 'palestra_turni_solo_mie'; // interruttore fra i propri turni e tutti
@@ -7590,13 +7590,15 @@ function App() {
       key: 'pagamenti',
       label: 'Pagamenti',
       pages: unlocked ? [['ore', 'Foglio ore'], ['pagamenti', 'Pagamento turni']] : [['ore', 'Foglio ore']]
+    }, {
+      /* le pagine del sito: le guardano tutti, le tocca solo chi ha i
+         permessi da amministratore (profilo admin e computer della palestra) */
+      key: 'soci',
+      label: 'Prenotazioni sito',
+      badge: nuovePre + nuovePren,
+      pages: [['prenotazioni', 'Prenotazioni'], ['posti', 'Posti per il sito'], ['preiscrizioni', 'Pre-iscrizioni']]
     }];
     const NAV_PRIV = [{
-      key: 'soci',
-      label: 'Sito',
-      badge: nuovePre + nuovePren,
-      pages: [['preiscrizioni', 'Pre-iscrizioni'], ['prenotazioni', 'Prenotazioni'], ['posti', 'Posti per il sito']]
-    }, {
       key: 'riepilogo',
       label: 'Riepilogo',
       pages: [['riepilogo', 'Riepilogo']]
@@ -7623,7 +7625,9 @@ function App() {
       onClick: () => {
         if (!g.pages.some(([k]) => k === page)) go(g.pages[0][0]);
       }
-    }, g.label)), unlocked && /*#__PURE__*/React.createElement("span", {
+    }, g.label, g.badge > 0 && /*#__PURE__*/React.createElement("span", {
+      className: "pg-badge"
+    }, g.badge))), unlocked && /*#__PURE__*/React.createElement("span", {
       className: "nav-priv"
     }, NAV_PRIV.map(g => /*#__PURE__*/React.createElement("button", {
       key: g.key,
@@ -8393,6 +8397,7 @@ function App() {
     vistaMie: soloMieView,
     setVistaMie: setSoloMie
   }), page === 'posti' && /*#__PURE__*/React.createElement(PostiPanel, {
+    canEdit: puoEntrare,
     data: data,
     upd: upd,
     actById: actById,
@@ -8403,6 +8408,7 @@ function App() {
     leggiPostiLiberi: leggiPostiLiberi
   }), page === 'prenotazioni' && /*#__PURE__*/React.createElement(PrenotazioniPanel, {
     cloudPronto: !!session,
+    canEdit: puoEntrare,
     leggi: leggiPrenotazioni,
     aggiorna: aggiornaPrenotazione,
     crea: creaPrenotazione,
@@ -8410,6 +8416,7 @@ function App() {
     onCambio: contaNuovePren
   }), page === 'preiscrizioni' && /*#__PURE__*/React.createElement(PreiscrizioniPanel, {
     cloudPronto: !!session,
+    canEdit: puoEntrare,
     cloudUid: session ? session.user.id : '',
     leggi: leggiPreiscrizioni,
     aggiorna: aggiornaPreiscrizione,
@@ -10315,6 +10322,7 @@ function PostiPanel({
   nomeSede,
   cloudPronto,
   cloudUid,
+  canEdit,
   inviaOfferte,
   leggiPostiLiberi
 }) {
@@ -10403,7 +10411,7 @@ function PostiPanel({
     className: "panel-title"
   }, "Posti per il sito"), /*#__PURE__*/React.createElement("div", {
     className: "tiny muted"
-  }, voci.length ? voci.length + (voci.length === 1 ? ' offerta aperta' : ' offerte aperte') : 'niente aperto al momento')), /*#__PURE__*/React.createElement("div", {
+  }, voci.length ? voci.length + (voci.length === 1 ? ' offerta aperta' : ' offerte aperte') : 'niente aperto al momento')), canEdit && /*#__PURE__*/React.createElement("div", {
     className: "lesson-row",
     style: {
       gap: 8
@@ -10422,7 +10430,7 @@ function PostiPanel({
     style: {
       marginBottom: 10
     }
-  }, esito && esito !== 'in' ? esito : !cloudPronto ? 'Senza collegamento al cloud niente va sul sito: appena ti colleghi parte da solo.' : daMandare.length ? daMandare.length + (daMandare.length === 1 ? ' offerta da aggiornare sul sito (parte da sola entro due minuti).' : ' offerte da aggiornare sul sito (partono da sole entro due minuti).') : 'Il sito è aggiornato. Mettendo o togliendo posti, cambia da solo.'), impostazioni && /*#__PURE__*/React.createElement("div", {
+  }, !canEdit ? 'Qui vedi cosa è aperto sul sito. Per cambiare i posti serve il profilo admin o un computer della palestra.' : esito && esito !== 'in' ? esito : !cloudPronto ? 'Senza collegamento al cloud niente va sul sito: appena ti colleghi parte da solo.' : daMandare.length ? daMandare.length + (daMandare.length === 1 ? ' offerta da aggiornare sul sito (parte da sola entro due minuti).' : ' offerte da aggiornare sul sito (partono da sole entro due minuti).') : 'Il sito è aggiornato. Mettendo o togliendo posti, cambia da solo.'), impostazioni && canEdit && /*#__PURE__*/React.createElement("div", {
     className: "years-box",
     style: {
       marginBottom: 12
@@ -10473,6 +10481,7 @@ function PostiPanel({
       min: "0",
       max: "50",
       value: n,
+      disabled: !canEdit,
       onChange: e => setPosti(p.id, Math.max(0, Math.min(50, parseInt(e.target.value, 10) || 0)))
     })), /*#__PURE__*/React.createElement("td", {
       className: "tiny"
@@ -10502,6 +10511,7 @@ function PostiPanel({
   }, /*#__PURE__*/React.createElement("input", {
     type: "checkbox",
     checked: !!c.attivo,
+    disabled: !canEdit,
     onChange: e => setCiclo(c.id, {
       attivo: e.target.checked
     })
@@ -10512,6 +10522,7 @@ function PostiPanel({
       minWidth: 140
     },
     placeholder: "Titolo del ciclo",
+    disabled: !canEdit,
     value: c.titolo || '',
     onChange: e => setCiclo(c.id, {
       titolo: e.target.value
@@ -10523,6 +10534,7 @@ function PostiPanel({
       width: 150
     },
     value: c.data || '',
+    disabled: !canEdit,
     onChange: e => setCiclo(c.id, {
       data: e.target.value
     })
@@ -10532,6 +10544,7 @@ function PostiPanel({
       width: 160
     },
     placeholder: "martedì 20:00 – 21:30",
+    disabled: !canEdit,
     value: c.orario || '',
     onChange: e => setCiclo(c.id, {
       orario: e.target.value
@@ -10542,6 +10555,7 @@ function PostiPanel({
     min: "0",
     max: "50",
     value: Number(c.posti || 0),
+    disabled: !canEdit,
     onChange: e => setCiclo(c.id, {
       posti: Math.max(0, Math.min(50, parseInt(e.target.value, 10) || 0))
     })
@@ -10550,19 +10564,22 @@ function PostiPanel({
     style: {
       minWidth: 86
     }
-  }, liberi[c.id] == null ? '' : liberi[c.id] + (liberi[c.id] === 1 ? ' libero' : ' liberi')), /*#__PURE__*/React.createElement("button", {
+  }, liberi[c.id] == null ? '' : liberi[c.id] + (liberi[c.id] === 1 ? ' libero' : ' liberi')), canEdit && /*#__PURE__*/React.createElement("button", {
     className: "iconbtn del",
     title: "Togli questo ciclo",
     onClick: () => delCiclo(c.id)
-  }, I.trash))), /*#__PURE__*/React.createElement("button", {
+  }, I.trash))), canEdit && /*#__PURE__*/React.createElement("button", {
     className: "btn sm",
     onClick: addCiclo
-  }, I.plus, " Aggiungi un ciclo")));
+  }, I.plus, " Aggiungi un ciclo"), !canEdit && cicli.length === 0 && /*#__PURE__*/React.createElement("div", {
+    className: "tiny muted"
+  }, "Nessun ciclo aperto.")));
 }
 
 /* ---- Prenotazioni arrivate dal sito ---- */
 function PrenotazioniPanel({
   cloudPronto,
+  canEdit,
   leggi,
   aggiorna,
   crea,
@@ -10696,7 +10713,7 @@ function PrenotazioniPanel({
     className: "btn sm",
     disabled: !cloudPronto || carico,
     onClick: carica
-  }, carico ? 'Aggiorno…' : 'Aggiorna'), /*#__PURE__*/React.createElement("button", {
+  }, carico ? 'Aggiorno…' : 'Aggiorna'), canEdit && /*#__PURE__*/React.createElement("button", {
     className: "btn sm primary",
     disabled: !cloudPronto,
     onClick: nuovoAMano
@@ -10781,13 +10798,15 @@ function PrenotazioniPanel({
       style: {
         whiteSpace: 'nowrap'
       }
-    }, r.stato === 'nuova' && /*#__PURE__*/React.createElement("button", {
+    }, !canEdit && /*#__PURE__*/React.createElement("span", {
+      className: "tiny muted"
+    }, "—"), canEdit && r.stato === 'nuova' && /*#__PURE__*/React.createElement("button", {
       className: "btn sm primary",
       onClick: () => segna(r, 'confermata')
-    }, "Conferma"), (r.stato === 'nuova' || r.stato === 'confermata') && /*#__PURE__*/React.createElement(React.Fragment, null, ' ', /*#__PURE__*/React.createElement("button", {
+    }, "Conferma"), canEdit && (r.stato === 'nuova' || r.stato === 'confermata') && /*#__PURE__*/React.createElement(React.Fragment, null, ' ', /*#__PURE__*/React.createElement("button", {
       className: "btn sm",
       onClick: () => segna(r, 'annullata')
-    }, "Annulla")), r.stato === 'confermata' && /*#__PURE__*/React.createElement(React.Fragment, null, ' ', /*#__PURE__*/React.createElement("button", {
+    }, "Annulla")), canEdit && r.stato === 'confermata' && /*#__PURE__*/React.createElement(React.Fragment, null, ' ', /*#__PURE__*/React.createElement("button", {
       className: "btn sm",
       onClick: () => segna(r, 'presente')
     }, "Presente"), ' ', /*#__PURE__*/React.createElement("button", {
@@ -10957,9 +10976,10 @@ const ETICH_PRE = {
   annullata: 'Annullata'
 };
 const TIPI_PRE = {
-  maggiorenne: 'Maggiorenne',
-  maggiorenne_fasi: 'Maggiorenne con tessera FASI',
-  minorenne: 'Minorenne'
+  maggiorenne: 'Adulto',
+  maggiorenne_fasi: 'Adulto già FASI',
+  minorenne: 'Minorenne',
+  minorenne_fasi: 'Minorenne già FASI'
 };
 const LOGHI_KEY = 'palestra_turni_loghi';
 const leggiLoghi = () => {
@@ -10989,6 +11009,7 @@ const dataPre = v => {
 function PreiscrizioniPanel({
   cloudPronto,
   cloudUid,
+  canEdit,
   leggi,
   aggiorna,
   onCambio
@@ -11102,7 +11123,7 @@ function PreiscrizioniPanel({
     className: "btn sm",
     disabled: !cloudPronto || carico,
     onClick: carica
-  }, carico ? 'Aggiorno…' : 'Aggiorna'), /*#__PURE__*/React.createElement("button", {
+  }, carico ? 'Aggiorno…' : 'Aggiorna'), canEdit && /*#__PURE__*/React.createElement("button", {
     className: "btn sm",
     onClick: () => setImpostazioni(!impostazioni)
   }, "Impostazioni"))), /*#__PURE__*/React.createElement("div", {
@@ -11114,7 +11135,7 @@ function PreiscrizioniPanel({
     style: {
       marginBottom: 10
     }
-  }, /*#__PURE__*/React.createElement("div", null, err)), impostazioni && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", null, err)), impostazioni && canEdit && /*#__PURE__*/React.createElement("div", {
     className: "years-box",
     style: {
       marginBottom: 12
@@ -11254,10 +11275,10 @@ function PreiscrizioniPanel({
     style: {
       whiteSpace: 'nowrap'
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, canEdit && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     className: "btn sm",
     onClick: () => stampa(r)
-  }, "Stampa"), ' ', /*#__PURE__*/React.createElement("button", {
+  }, "Stampa"), ' '), /*#__PURE__*/React.createElement("button", {
     className: "btn sm",
     onClick: () => setApertaId(r.id)
   }, "Apri"))))))), aperta && /*#__PURE__*/React.createElement(Modal, {
@@ -11271,13 +11292,13 @@ function PreiscrizioniPanel({
       flexWrap: 'wrap',
       marginBottom: 12
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, canEdit && /*#__PURE__*/React.createElement("button", {
     className: "btn primary",
     onClick: () => stampa(aperta)
-  }, "Stampa il modulo"), aperta.stato !== 'firmata' && /*#__PURE__*/React.createElement("button", {
+  }, "Stampa il modulo"), canEdit && aperta.stato !== 'firmata' && /*#__PURE__*/React.createElement("button", {
     className: "btn",
     onClick: () => segna(aperta, 'firmata')
-  }, "Firmata"), aperta.stato !== 'annullata' && /*#__PURE__*/React.createElement("button", {
+  }, "Firmata"), canEdit && aperta.stato !== 'annullata' && /*#__PURE__*/React.createElement("button", {
     className: "btn",
     onClick: () => annulla(aperta)
   }, "Annulla"), /*#__PURE__*/React.createElement("span", {
@@ -11292,7 +11313,7 @@ function PreiscrizioniPanel({
     className: "pre-campo"
   }, /*#__PURE__*/React.createElement("span", {
     className: "tiny muted"
-  }, c[0]), /*#__PURE__*/React.createElement("b", null, c[1])))), blocco(aperta.tipo_modulo === 'minorenne' ? 'Il ragazzo' : 'Il socio', aperta.socio), aperta.genitore && blocco('Il genitore', aperta.genitore), /*#__PURE__*/React.createElement("div", {
+  }, c[0]), /*#__PURE__*/React.createElement("b", null, c[1])))), blocco(/^minorenne/.test(aperta.tipo_modulo) ? 'Il ragazzo' : 'Il socio', aperta.socio), aperta.genitore && blocco('Il genitore', aperta.genitore), /*#__PURE__*/React.createElement("div", {
     className: "field-label"
   }, "Consensi"), /*#__PURE__*/React.createElement("ul", {
     className: "tiny",
@@ -11308,7 +11329,6 @@ function PreiscrizioniPanel({
     className: "tiny"
   }, aperta.note)))));
 }
-
 const SQL_PREN_BASE = "-- Prenotazioni dal sito: da eseguire una volta in Supabase (SQL editor).\n-- Dati personali: il progetto deve stare in una regione dell'UE.\n\n-- 1) quello che l'app pubblica: prove gratuite e cicli del corso adulti\ncreate table if not exists offerte_sito (\n  id text primary key,\n  tipo text not null check (tipo in ('prova','corso')),\n  sede text not null check (sede in ('Carmagnola','Alba')),\n  titolo text not null,\n  anno_da int, anno_a int,\n  data date not null,\n  orario text not null,\n  posti int not null check (posti >= 0),\n  attiva boolean not null default true\n);\n\n-- 2) quello che arriva dal sito\ncreate table if not exists prenotazioni (\n  id uuid primary key default gen_random_uuid(),\n  creata timestamptz not null default now(),\n  offerta_id text not null references offerte_sito(id),\n  nome text not null,\n  ragazzo text,\n  anno_nascita int,\n  email text not null,\n  telefono text not null,\n  privacy boolean not null,\n  stato text not null default 'nuova' check (stato in ('nuova','confermata','annullata','presente','assente')),\n  note text\n);\ncreate index if not exists prenotazioni_stato_creata on prenotazioni (stato, creata desc);\n\n-- 3) i posti liberi, senza far vedere chi ha prenotato\ncreate or replace view offerte_sito_pubbliche as\n  select o.*, o.posti - coalesce((select count(*) from prenotazioni p\n           where p.offerta_id = o.id and p.stato in ('nuova','confermata','presente')), 0) as posti_liberi\n  from offerte_sito o\n  where o.attiva and o.data >= current_date;\n\n-- 4) niente prenotazioni oltre i posti\ncreate or replace function controlla_posti() returns trigger language plpgsql security definer set search_path = public as $$\ndeclare liberi int;\nbegin\n  select posti_liberi into liberi from offerte_sito_pubbliche where id = new.offerta_id;\n  if liberi is null then raise exception 'offerta non disponibile'; end if;\n  if liberi <= 0 then raise exception 'posti esauriti'; end if;\n  return new;\nend $$;\ndrop trigger if exists prenotazioni_posti on prenotazioni;\ncreate trigger prenotazioni_posti before insert on prenotazioni\n  for each row execute function controlla_posti();\n\n-- 5) i permessi\nalter table offerte_sito enable row level security;\nalter table prenotazioni enable row level security;\ngrant select on offerte_sito_pubbliche to anon;\ndrop policy if exists \"staff offerte\" on offerte_sito;\ncreate policy \"staff offerte\" on offerte_sito for all to authenticated\n  using (auth.uid()::text = '@UID@')\n  with check (auth.uid()::text = '@UID@');\ndrop policy if exists \"sito prenota\" on prenotazioni;\ncreate policy \"sito prenota\" on prenotazioni for insert to anon\n  with check (stato = 'nuova' and privacy);\ndrop policy if exists \"staff prenotazioni\" on prenotazioni;\ncreate policy \"staff prenotazioni\" on prenotazioni for all to authenticated\n  using (auth.uid()::text = '@UID@')\n  with check (auth.uid()::text = '@UID@');";
 function sqlPrenotazioni(uid) {
   return SQL_PREN_BASE.split('@UID@').join(uid || UID_SEGNAPOSTO);
@@ -11388,79 +11408,186 @@ const ETICH_PREN = {
 };
 
 /* ---- pre-iscrizioni: la stampa del modulo ----
-   Funzione presa come e' dal documento del sito (preiscrizioni-app.md):
-   produce la pagina dati del modulo cartaceo, A5 orizzontale, da stampare
-   insieme alle pagine fisse (regolamento e informativa). */
+   Presa com'e' dal documento del progetto claude/stampa-modulo-a4.js.
+   Modulo di iscrizione su un solo foglio A4 fronte, compilato con i dati della pre-iscrizione.
+   Testi presi dai moduli MDA 2026 (con l'informativa aggiornata a novembre 2026).
+   stampaModulo(p, loghi) -> HTML; stampaPreiscrizione(p, loghi) apre la finestra di stampa.
+   testoModulo(tipo, parte) -> HTML di 'regolamento' o 'informativa', per leggerli prima di firmare. */
+var TESTI_MODULI = (function () {
+  /* i testi che tornano identici in piu' moduli stanno qui una volta sola */
+  var INFORMATIVA = [["p", "ROTPUNKT A.S.D."], ["p", "PRIVACY POLICY INFORMATIVA"], ["p", "Artt. 13-14 del Reg.to UE 2016/679"], ["p", "Gentile Socio/a,"], ["p", "ai sensi del Regolamento Generale per la Protezione dei Dati personali delle persone fisiche (GDPR – Reg.(UE)2016/679), la scrivente associazione, titolare del trattamento, informa di quanto segue:"], ["p", "I dati in possesso della scrivente sono rilasciati direttamente dagli interessati."], ["p", "1.Fonti e Categorie dei Dati Personali"], ["p", "Tali informazioni riguardano dati personali (anagrafici, di contatto, recapiti, numeri di telefono, indirizzi email), dati sanitari attraverso la vostra presentazione di certificati medici, dati particolari e dati personali economici."], ["p", "2.Finalità e basi giuridiche del Trattamento"], ["p", "I dati personali, sanitari, economici sono trattati nell’ambito della normale attività svolta dalla scrivente associazione e secondo le seguenti finalità (per ciascuna delle quali tra parentesi è indicata la base giuridica mediante riferimento agli articoli del GDPR):"], ["p", "a) finalità strettamente connesse all’espletamento e messa in atto dei servizi (GDPR artt.6(b) e 9(a)),"], ["p", "b) finalità strettamente connesse e strumentali alla gestione dei rapporti con gli interessati (GDPR art.6(b) e 9(a));"], ["p", "c) finalità connesse a obblighi previsti da leggi, nonché da disposizioni impartite da autorità a ciò legittimate dalla legge (GDPR artt. 6(c) e 9(b,g));"], ["p", "d) finalità funzionali all'attività per le quali l'interessato ha facoltà di manifestare o no il consenso (GDPR art.6(a) e 9(a))."], ["p", "Specificamente i dati anagrafici forniti verranno utilizzati allo scopo di:"], ["p", "iscrivere alla Federazione di Arrampicata Sportiva Italiana (F.A.S.I. che assume così il ruolo di co-titolare del trattamento insieme alla Rotpunkt a.s.d.) e dare informazione all’ente assicurante per le coperture infortuni, dare informazione circa i programmi dell’associazione, richiamare gli associati alle scadenze societarie (assemblee, rinnovi, certificati medici, etc.) e coordinare le partecipazioni ad eventi sportivi/culturali con altri partners ed organismi legittimati (associazioni sportive omologhe, enti o APT territoriali, etc.). Si precisa che i numeri di telefono vengono richiesti allo scopo di rintracciare immediatamente la famiglia per avvisi o comunicazioni relative all'attività o all'atleta. L'indirizzo e-mail, sarà inserito in un database per inviare, notizie sull'attività dell'associazione tramite il servizio di posta elettronica."], ["p", "e per fini di:"], ["p", "segreteria ed invio comunicazioni relative ad informazioni sull’attività dell'associazione: a tal fine si precisa che questi potranno essere trasmessi agli enti con cui Rotpunkt a.s.d. collabora, organi di controllo ispettivi in obbligo di legge e altri soggetti per specifiche previsioni contrattuali o di legge e da questi trattati nella misura necessaria all'adempimento di obblighi previsti dalla legge e dalle norme statutarie."], ["p", "I dati sanitari forniti con la presentazione del certificato medico per attività sportiva verranno utilizzati al solo scopo del rispetto delle norme statuarie e del regolamento della palestra nonché della normativa vigente. Tali dati saranno eventualmente prodotti (se richiesti) alla Reale Mutua Assicurazioni – agenzia di Milano Magenta - in caso di sinistro e conseguente necessità di aprire pratica per infortunio."], ["p", "Il materiale fotografico e video verrà eventualmente utilizzato per promozione pubblicitaria tramite riproduzione dell'immagine sia fotografica che filmata che l’Associazione decidesse di pubblicare, senza remunerazione, sul proprio sito web, su social network o su carta stampata."], ["p", "3.Conferimento dei Dati e Conseguenze del Rifiuto:"], ["p", "Il conferimento dei dati dell’interessato è obbligatorio in quanto indispensabile al fine dell’elaborazione degli stessi per le finalità alle lettere a) e b). L’eventuale rifiuto di fornire tali dati e/o il diniego del consenso al trattamento (anche successivo) potrà comportare l’impossibilità di prendere in considerazione la richiesta di tesseramento e rinnovo e, in via più generale, la mancata o parziale esecuzione o prosecuzione del rapporto conseguente alla procedura di tesseramento da Lei richiesta. Per tutti i dati non indispensabili il conferimento è facoltativo. Il trattamento dei dati per le finalità di cui alla lettera d) (connesse all’eventuale attività promozionale) è del tutto facoltativo e vincolato ad apposito consenso dell’interessato."], ["p", "4.Modalità del Trattamento"], ["p", "Per trattamento dei dati si intende la loro raccolta, registrazione, organizzazione, conservazione, elaborazione, modificazione, cancellazione e distruzione ovvero la combinazione di due o più di tali operazioni. In relazione alle sopraindicate finalità, i dati personali sono sottoposti a trattamento sia cartaceo (mediante strumenti manuali e conservati in archivio fisico dotato di nottolino per la chiusura a chiave), sia informatico (un server ubicato in Italia su un cluster di sei macchine fisiche dotate di password per l’accesso) e telematico, anche automatizzati, atti a memorizzare e gestire i dati stessi, con logiche strettamente correlate alle finalità stesse e, comunque, in modo da garantire la sicurezza e la riservatezza (l’applicazione di gestione dati della Rotpunkt a.s.d. è sviluppata e lavora esclusivamente on-premise; servizi online al punto 5): il trattamento sarà pertanto effettuato (in tutte le sue forme) adottando specifiche misure di sicurezza per prevenirne la perdita, l’utilizzo illecito o non corretto ed accessi non autorizzati. I dati personali saranno dunque trattati nel rispetto delle modalità indicate nell’art. 5 Reg.to UE 2016/679, il quale prevede, tra l'altro, che questi siano trattati in modo lecito e secondo correttezza, raccolti e registrati per scopi determinati, espliciti e legittimi, esatti, e se necessario aggiornati, pertinenti, completi e non eccedenti rispetto alle finalità del trattamento, nel rispetto dei diritti e delle libertà fondamentali, nonché della dignità dell'interessato con particolare riferimento alla riservatezza e alla identità personale, mediante misure di protezione e sicurezza. La scrivente organizzazione ha predisposto e perfezionerà ulteriormente il sistema di sicurezza di accesso e conservazione dei dati."], ["p", "5.Comunicazione e diffusione dei dati"], ["p", "I dati forniti saranno comunicati alla Federazione di Arrampicata Sportiva Italiana (F.A.S.I.) qualora il soggetto richiedente non sia già stato iscritto alla federazione presso altre palestre anch’esse affiliate a F.A.S.I."], ["p", "Trasferimenti Extra UE"], ["p", "Il trattamento avverrà in Italia e nell’UE; non è previsto il trasferimento verso paesi extra UE."], ["p", "Periodo di Conservazione"], ["p", "Il Titolare tratterà i dati personali per il tempo necessario ad adempiere alle finalità per cui sono stati raccolti, in ottemperanza anche agli obblighi di natura amministrativa, civilistica, fiscale, tributaria, contabile vigente e comunque non oltre i 10 anni."], ["p", "Categorie di Destinatari"], ["p", "Si precisa che senza il preventivo generale consenso dell’interessato alle comunicazioni a terzi, sarà possibile dar corso esclusivamente ai servizi che non prevedono tali comunicazioni. In caso di necessità saranno richiesti specifici e puntuali consensi e i soggetti che riceveranno i dati li utilizzeranno in qualità di autonomi titolari."], ["p", "Servizi online. Per pre-iscrizione e Area soci usiamo fornitori nominati responsabili (art. 28 GDPR): Supabase (archivio, server UE), Brevo (email, Francia), Amazon Web Services (lettura automatica dei documenti, server UE). I dati online restano salvati per i rinnovi."], ["p", "6. Diritti dell’interessato"], ["p", "In ogni momento, Lei potrà esercitare, ai sensi degli articoli dal 15 al 22 del Regolamento UE n. 2016/679, il diritto di:"], ["p", "a) chiedere la conferma dell’esistenza o meno di propri dati personali;"], ["p", "b) ottenere le indicazioni circa le finalità del trattamento, le categorie dei dati personali, i destinatari o le categorie di destinatari a cui i dati personali sono stati o saranno comunicati e, quando possibile, il periodo di conservazione;"], ["p", "c) ottenere la rettifica e la cancellazione dei dati;"], ["p", "d) ottenere la limitazione del trattamento;"], ["p", "e) ottenere la portabilità dei dati, ossia riceverli da un titolare del trattamento, in un formato strutturato, di uso comune e leggibile da dispositivo automatico, e trasmetterli ad un altro titolare del trattamento senza impedimenti;"], ["p", "f) opporsi al trattamento in qualsiasi momento ed anche nel caso di trattamento per finalità di marketing diretto;"], ["p", "g) opporsi ad un processo decisionale automatizzato relativo alle persone fisiche, compresa la profilazione."], ["p", "h) chiedere al titolare del trattamento l’accesso ai dati personali e la rettifica o la cancellazione degli stessi o la limitazione del trattamento che lo riguardano o di opporsi al loro trattamento, oltre al diritto alla portabilità dei dati;"], ["p", "i) revocare il consenso in qualsiasi momento senza pregiudicare la liceità del trattamento basata sul consenso prestato prima della revoca;"], ["p", "j) proporre reclamo a un’autorità di controllo."], ["p", "Può esercitare i Suoi diritti con richiesta scritta inviata all'indirizzo postale della sede legale o all’indirizzo mail: info@bigwallclimb.com."], ["p", "7.Titolare del Trattamento"], ["p", "Il titolare del trattamento dei dati personali è il sig. Bergia Federico contattabile via e-mail: info@bigwallclimb.com o su mob.: 331/1079407."]];
+  var CONS_TESTA = [["p", "Io sottoscritto/a dichiaro di aver ricevuto l’informativa che precede."], ["p", "Carmagnola, lì …../…../………."], ["p", "Io sottoscritto/a alla luce dell’informativa ricevuta"], ["p", "◻ esprimo il consenso ◻ NON esprimo il consenso al trattamento dei miei dati personali inclusi quelli considerati come categorie particolari di dati."], ["p", "◻ esprimo il consenso ◻ NON esprimo il consenso alla comunicazione dei miei dati personali ad enti pubblici e società di natura privata per le finalità indicate nell’informativa."], ["p", "◻ esprimo il consenso ◻ NON esprimo il consenso al trattamento dei dati personali per finalità di promozione della Rotpunkt a.s.d."]];
+  var CONS_ADULTO = CONS_TESTA.concat([["p", "Firma……………………………………………..…………………………….."]]);
+  var CONS_MINORE = CONS_TESTA.concat([["p", "Firma (Genitore 1) ……………..………………………….………….……….. Firma (Genitore2) …….………………………………………….….…………"]]);
+  var SAFE_TESTO = "RESPONSABILE SAFEGUARDING:\n[Responsabile contro abusi, violenze e discriminazioni, con lo scopo di prevenire e contrastare ogni tipo di abuso, violenza e discriminazione sui tesserati nonché per garantire la protezione dell’integrità fisica e morale degli sportivi, anche ai sensi dell’art. 33, comma 6, del d.lgs. 36/2021]\nLa Rotpunkt a.s.d. rende noto di aver nominato in data 25/06/2024 in qualità di Responsabile Safeguarding:\nLidia Maria Solavagione, e-mail: studiosolavagione@gmail.com\nLa Rotpunkt a.s.d. informa inoltre che il Modello Organizzativo e di Controllo (M.O.C) e il Codice di Condotta adottati sono disponibili online sul sito bigwallclimb.com e in forma cartacea nella bacheca sociale all’interno della palestra.";
+  var SAFE_TAB = [["t", [[SAFE_TESTO]]]];
+  var REG_FASI = [["p", "PRESA VISIONE DEL SEGUENTE REGOLAMENTO:"], ["p", "Per poter frequentare il centro è necessario essere tesserati alla FASI (Federazione Arrampicata Sportiva Italiana), aver consegnato certificato medico originale e in corso di validità e sottoscrivere il seguente regolamento interno. Premesso che l’arrampicata sportiva è uno sport potenzialmente pericoloso, è fatto obbligo a tutti i frequentatori di rispettare scrupolosamente le norme di seguito riportate."], ["p", "1) La pratica dell’arrampicata sportiva presso le strutture della palestra è consentita ai tesserati FASI previa presa visione ed accettazione firmata del presente regolamento."], ["p", "2) L’accesso alle strutture è consentito solo durante gli orari d’apertura. L’accesso alla palestra è possibile solo se in possesso della tessera."], ["p", "3) La gestione non fornisce il materiale tecnico individuale se non concordato preventivamente."], ["p", "Diritti"], ["p", "4) Durante l’anno gli orari della palestra potranno subire delle variazioni senza che questo comporti rimborsi o riduzioni di prezzo."], ["p", "5) La gestione non assume la responsabilità per la custodia dei materiali e qualunque altro bene o effetto personale durante la permanenza degli utenti nei locali della palestra."], ["p", "6) E’ facoltà del personale responsabile allontanare dalla palestra chiunque si comporti in modo non ritenuto conforme a quanto previsto nel presente regolamento."], ["p", "Norme Comportamento Utenza"], ["p", "7) All’interno della palestra ogni frequentatore deve adottare un comportamento vigile, educato, responsabile e igienico al fine di evitare rischi per sé stesso e per gli altri. Si ricorda che, in caso di ferita sanguinante, è obbligatorio per ragioni igienico-sanitarie sospendere l’attività sportiva fino all’arresto dell’emorragia."], ["p", "8) E’ VIETATO CORRERE e svolgere qualsiasi attività incompatibile con l’arrampicata sportiva, è inoltre vietato fumare, introdurre animali ed utilizzare apparecchiature musicali."], ["p", "9) E’ VIETATO L’USO DI MAGNESITE IN POLVERE. E’ previsto il SOLO USO DI PALLINE “CHALK BALL” o magnesite liquida."], ["p", "10) Per l’uso di tutte le pareti di arrampicata è obbligatorio indossare scarpette apposite. Nelle altre zone della struttura è d’obbligo l’utilizzo di calzature pulite ed asciutte. L’abbigliamento dovrà essere idoneo (non è ammesso il torso nudo), evitando la presenza di oggetti nelle tasche."], ["p", "11) Il posizionamento delle prese e la tracciatura dei percorsi è riservato al personale della palestra: qualsiasi necessità di ripristino o intervento tecnico dovrà essere segnalato al personale responsabile (appigli che girano etc.)."], ["p", "12) Negli orari di apertura sarà presente personale con funzioni di assistenza e sorveglianza. I frequentatori sono tenuti ad osservare quanto indicato dal personale responsabile al fine di garantire la massima sicurezza per la pratica dell’arrampicata."], ["p", "13) Vietato scalare utilizzando il telefonino. Si vieta l’uso di bracciali, anelli o collane che possano agganciarsi alla struttura ferendo l’utente."], ["p", "Minorenni"], ["p", "14) La sala boulder può essere frequentata autonomamente dai minori che hanno compiuto il sedicesimo anno di età. I minori che non hanno compiuto il sedicesimo anno di età potranno accedere alla sala boulder accompagnati e assistiti o da un adulto firmatario del presente regolamento oppure da un diverso accompagnatore che dovrà essere edotto del presente regolamento da parte del genitore firmatario."], ["p", "15) I ragazzi U11/13 non possono salire sopra i 3,0 mt di altezza, i ragazzi U15 non possono salire sopra i 3,5 mt e neppure usare gli attrezzi fitness."], ["p", "Regolamento Sala Boulder"], ["p", "16) E’ VIETATO SOSTARE SUI MATERASSI DI PROTEZIONE MENTRE ALTRI ARRAMPICATORI STANNO SCALANDO. La precedenza è di chi arrampica. Ove possibile si consiglia di parare e facilitare l’atterraggio corretto di chi arrampica, il personale è disponibile per un’eventuale assistenza."]];
+  var REG_FASI_CODA = [["p", "Il sottoscritto ribadisce di essere stato invitato a prendere attenta e specifica visione di quanto segue:"], ["p", "1) obbligo e rispetto del regolamento"], ["p", "2) assunzione di responsabilità"], ["p", "3) accettazione del rischio"], ["p", "4) possesso dei requisiti fisici e tecnici."], ["p", "I vostri dati verranno usati esclusivamente da Rotpunkt A.s.d. per finalità amministrative: saranno conservati e trattati nel rispetto della Legge 679/2016 sulla Privacy."], ["p", "Data:……../………./……………….. Firma per esteso…………………………………………………………………………………………."]];
+  return {
+    "maggiorenne": {
+      "domanda": [["p", "MODULO DOMANDA DI AMMISSIONE SOCIO MAGGIORENNE"], ["p", "Al Consiglio Direttivo della Associazione"], ["p", "IL SOTTOSCRITTO"], ["p", "NOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ COGNOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "NATO IL: ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ A: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "PROV.: ǀ__ǀǀ__ǀ CODICE FISCALE: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "INDIRIZZO: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ N°.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "CAP: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ CITTA’: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ PROV.: ǀ__ǀǀ__ǀ"], ["p", "E-MAIL.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "CELL.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "condividendo gli scopi e lo statuto della ROTPUNKT A.S.D., manifestata la volontà di adesione, CHIEDE di essere ammesso in qualità di socio alla ROTPUNKT A.S.D., per lo svolgimento e il raggiungimento degli scopi primari della stessa, attenendosi allo statuto sociale e alle deliberazioni degli organi sociali e a tal fine dichiara:"], ["p", "di conoscere ed accettare quanto stabilito dallo Statuto;"], ["p", "di conoscere ed accettare in ogni sua parte il Regolamento dell'associazione, di rispettarlo integralmente e di assumersi ogni responsabilità derivante dal mancato rispetto dello stesso;"], ["p", "di esonerare la Rotpunkt a.s.d. e i suoi legali rappresentanti ed il personale incaricato della gestione della palestra BIG WALL, da ogni e qualunque responsabilità per infortuni ed incidenti che dovessero accadere durante l’utilizzo della struttura di arrampicata ed accessori ad essa pertinenti in caso di mancato rispetto del regolamento succitato;"], ["p", "di riconoscere l’esistenza di rischi connessi all’attività dell’arrampicata sportiva e di accertarli integralmente e farsene totalmente carico, rinunciando ad ogni azione, sia in sede civile che penale, nei confronti dell’A.s.d. Rotpunkt e dei responsabili di servizio sollevandoli da ogni responsabilità accettando espressamente la clausola di esonero di responsabilità come da regolamento;"], ["p", "di versare le seguenti quote:"], ["t", [["Per tesseramento a:", "Tipologia di atleta:", "Dal 01/01 al 31/08", "Dal 01/09 al 30/11"], ["F.A.S.I.", "Amatore", "10,00 €", "7,00 €"], ["(Federazione Arrampicata Sportiva Italiana)", "Agonista", "20,00 €", "10,00 €"], ["ROTPUNKT A.S.D.", "15,00 €", "8,00 €"]]], ["p", "dal 01/12 al 31/12 il tesseramento è gratuito;"], ["p", "di essere in possesso dell'idoneità psicofisica ed esente da malattie controindicate alla pratica sportiva;"], ["p", "di impegnarsi a produrre nel minor tempo possibile, dal momento dell’adesione alla Rotpunkt a.s.d., certificato medico di idoneità sportiva non agonistica in corso di validità;"], ["p", "di autorizzare il tesseramento alla Federazione di Arrampicata Sportiva Italiana (F.A.S.I.);"], ["p", "DI ESSERE STATO INFORMATO CHE, CON LA PRESENTE, SI DIVENTA SOCIO Dl UN'ASSOCIAZIONE SPORTIVA DILETTANTISTICA SENZA SCOPO DI LUCRO."], ["p", "Data ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ Firma: ________________________________________"]],
+      "safeguarding": SAFE_TAB.concat([["p", "RISERVATO ALL' AMMINISTRAZIONE: Ammesso nella riunione del Consiglio direttivo del ............................. Iscritto a libro soci al N. …………………………. Cancellato nella riunione del Consiglio direttivo del …………………………."]]),
+      "regolamento": [["p", "REGOLAMENTO BIG WALL CLIMB (palestra di arrampicata)"], ["p", "Per poter frequentare il centro è necessario essere tesserati alla FASI (Federazione Arrampicata Sportiva Italiana), aver consegnato certificato medico originale e in corso di validità e sottoscrivere il seguente regolamento interno. Premesso che l’arrampicata sportiva è uno sport potenzialmente pericoloso, è fatto obbligo a tutti i frequentatori di rispettare scrupolosamente le norme di seguito riportate."], ["p", "1) La pratica dell’arrampicata sportiva presso le strutture della palestra è consentita ai soci della Rotpunkt previa presa visione ed accettazione firmata del presente regolamento.2) L’accesso alle strutture è consentito solo durante gli orari d’apertura. L’accesso alla palestra è possibile solo se in possesso della tessera.3) La gestione non fornisce il materiale tecnico individuale se non concordato preventivamente."], ["p", "Diritti"], ["p", "4) Durante l’anno gli orari della palestra potranno subire delle variazioni senza che questo comporti rimborsi o riduzioni di prezzo.5) La gestione non assume la responsabilità per la custodia dei materiali e qualunque altro bene o effetto personale durante la permanenza degli utenti nei locali della palestra.6) E’ facoltà del personale responsabile allontanare dalla palestra chiunque si comporti in modo non ritenuto conforme a quanto previsto nel presente regolamento."], ["p", "Norme Comportamento Utenza"], ["p", "7) All’interno della palestra ogni frequentatore deve adottare un comportamento vigile, educato, responsabile e igienico al fine di evitare rischi per sé stesso e per gli altri. Si ricorda che, in caso di ferita sanguinante, è obbligatorio per ragioni igienico-sanitarie sospendere l’attività sportiva fino all’arresto dell’emorragia.8) E’ VIETATO CORRERE e svolgere qualsiasi attività incompatibile con l’arrampicata sportiva, è inoltre vietato fumare, introdurre animali ed utilizzare apparecchiature musicali.9) E’ VIETATO L’USO DI MAGNESITE IN POLVERE. E’ previsto il SOLO USO DI PALLINE “CHALK BALL” o magnesite liquida.10) Per l’uso di tutte le pareti di arrampicata è obbligatorio indossare scarpette apposite. Nelle altre zone della struttura è d’obbligo l’utilizzo di calzature pulite ed asciutte. L’abbigliamento dovrà essere idoneo (non è ammesso il torso nudo), evitando la presenza di oggetti nelle tasche.11) Il posizionamento delle prese e la tracciatura dei percorsi è riservato al personale della palestra: qualsiasi necessità di ripristino o intervento tecnico dovrà essere segnalato al personale responsabile (appigli che girano etc.). 12) Negli orari di apertura sarà presente personale con funzioni di assistenza e sorveglianza. I frequentatori sono tenuti ad osservare quanto indicato dal personale responsabile al fine di garantire la massima sicurezza per la pratica dell’arrampicata.13) Vietato scalare utilizzando il telefonino. Si vieta l’uso di bracciali, anelli o collane che possano agganciarsi alla struttura ferendo l’utente."], ["p", "Minorenni"], ["p", "14) La sala boulder può essere frequentata autonomamente dai minori che hanno compiuto il sedicesimo anno di età. I minori che non hanno compiuto il sedicesimo anno di età potranno accedere alla sala boulder accompagnati e assistiti o da un adulto firmatario del presente regolamento oppure da un diverso accompagnatore che dovrà essere edotto del presente regolamento da parte del genitore firmatario.15) I ragazzi U11/13 non possono salire sopra i 3,0 mt di altezza, i ragazzi U15 non possono salire sopra i 3,5 mt e neppure usare gli attrezzi fitness."], ["p", "Regolamento Sala Boulder"], ["p", "16) E’ VIETATO SOSTARE SUI MATERASSI DI PROTEZIONE MENTRE ALTRI ARRAMPICATORI STANNO SCALANDO. La precedenza è di chi arrampica. Ove possibile si consiglia di parare e facilitare l’atterraggio corretto di chi arrampica, il personale è disponibile per un’eventuale assistenza."], ["t", [["Il sottoscritto …………………………………….…………………………………….……………… in qualità di frequentatore della struttura artificiale di arrampicata\nDICHIARA\nDi aver letto attentamente il presente regolamento e di accettarlo in ogni sua parte impegnandosi a rispettarlo integralmente ed assumendosi ogni responsabilità derivante dal mancato rispetto dello stesso. Di esonerare la Rotpunkt A.s.d., i legali rappresentanti ed il personale incaricato alla gestione da ogni responsabilità per infortuni ed incidenti che dovessero accadere durante l'utilizzo della struttura d'arrampicata o per accessori ad essa pertinenti in caso di mancato completo rispetto del presente regolamento. Dichiara di conoscere l'esistenza di rischi connessi all'attività dell'arrampicata sportiva e di accettarli integralmente e farsene totalmente carico. Dichiara di essere in possesso dei requisiti fisici e tecnici per la pratica dell'arrampicata sportiva e pertanto di esercitare la stessa in modo autonomo e non in regime di affidamento rispetto a chi gestisce la struttura.\nIl sottoscritto ribadisce di essere stato invitato a prendere attenta e specifica visione di quanto segue:1) obbligo e rispetto del regolamento 2) assunzione di responsabilità 3) accettazione del rischio 4) possesso dei requisiti fisici e tecnici.\nI vostri dati verranno usati esclusivamente da Rotpunkt A.s.d. per finalità amministrative: saranno conservati e trattati nel rispetto della Legge 679/2016 sulla Privacy.\nData:……../………./……………….. Firma per esteso………………………………………………………………………………………….."]]]],
+      "informativa": INFORMATIVA,
+      "consensi": CONS_ADULTO
+    },
+    "maggiorenne_fasi": {
+      "domanda": [["p", "IL SOTTOSCRITTO"], ["p", "NOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ COGNOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "NATO IL: ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ A: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "PROV.: ǀ__ǀǀ__ǀ CODICE FISCALE: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "INDIRIZZO: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ N°.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "CAP: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ CITTA’: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ PROV.: ǀ__ǀǀ__ǀ"], ["p", "E-MAIL.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "CELL.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "SOCIETA’: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "NUMERO di TESSERA: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"]].concat(REG_FASI).concat([["p", "DICHIARA, in qualità di frequentatore della struttura artificiale di arrampicata, di aver letto attentamente il presente regolamento e di accettarlo in ogni sua parte impegnandosi a rispettarlo integralmente ed assumendosi ogni responsabilità derivante dal mancato rispetto dello stesso. Di esonerare la Rotpunkt A.s.d., i legali rappresentanti ed il personale incaricato alla gestione da ogni responsabilità per infortuni ed incidenti che dovessero accadere durante l'utilizzo della struttura d'arrampicata o per accessori ad essa pertinenti in caso di mancato completo rispetto del presente regolamento. Dichiara di conoscere l'esistenza di rischi connessi all'attività dell'arrampicata sportiva e di accettarli integralmente e farsene totalmente carico. Dichiara di essere in possesso dei requisiti fisici e tecnici per la pratica dell'arrampicata sportiva e pertanto di esercitare la stessa in modo autonomo e non in regime di affidamento rispetto a chi gestisce la struttura."]]).concat(REG_FASI_CODA),
+      "safeguarding": SAFE_TAB,
+      "regolamento": [],
+      "informativa": INFORMATIVA,
+      "consensi": CONS_ADULTO
+    },
+    "minorenne": {
+      "domanda": [["p", "MODULO DOMANDA DI AMMISSIONE SOCIO MINORENNE"], ["p", "Al Consiglio Direttivo della Associazione"], ["p", "IL SOTTOSCRITTO [GENITORE]"], ["p", "NOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ COGNOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ NATO IL: ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "A: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ PROV.: ǀ__ǀǀ__ǀ C.F.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "INDIRIZZO: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ N°.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ CAP: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "CITTA’: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ PROV.: ǀ__ǀǀ__ǀCELL.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "E-MAIL.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "In qualità di GENITORE di:"], ["p", "NOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ COGNOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ__ǀ NATO IL: ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "A: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ PROV.: ǀ__ǀǀ__ǀ C.F.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "INDIRIZZO: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ N°.: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ CAP: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "CITTA’: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ PROV.: ǀ__ǀǀ__ǀ"], ["p", "condividendo gli scopi e lo statuto della ROTPUNKT A.S.D. CHIEDE che questi sia ammesso in qualità di socio alla ROTPUNKT A.S.D., per lo svolgimento e il raggiungimento degli scopi primari della stessa, attenendosi allo statuto sociale e alle deliberazioni degli organi sociali e a tal fine dichiara:"], ["p", "di conoscere ed accettare quanto stabilito dallo Statuto;"], ["p", "di conoscere ed accettare in ogni sua parte il Regolamento dell'associazione, di rispettarlo integralmente e di assumersi ogni responsabilità derivante dal mancato rispetto dello stesso;"], ["p", "di esonerare la Rotpunkt a.s.d. e i suoi legali rappresentanti ed il personale incaricato della gestione della palestra BIG WALL, da ogni e qualunque responsabilità per infortuni ed incidenti che dovessero accadere durante l’utilizzo della struttura di arrampicata ed accessori ad essa pertinenti in caso di mancato rispetto del regolamento succitato;"], ["p", "di riconoscere l’esistenza di rischi connessi all’attività dell’arrampicata sportiva e di accertarli integralmente e farsene totalmente carico, rinunciando ad ogni azione, sia in sede civile che penale, nei confronti dell’A.s.d. Rotpunkt e dei responsabili di servizio sollevandoli da ogni responsabilità accettando espressamente la clausola di esonero di responsabilità come da regolamento;"], ["p", "di versare le seguenti quote:"], ["t", [["Per tesseramento a:", "Tipologia di atleta:", "Dal 01/01 al 31/08", "Dal 01/09 al 30/11"], ["F.A.S.I.", "Amatore", "6,00 €", "4,00 €"], ["(Federazione Arrampicata Sportiva Italiana)", "Agonista", "10,00 €", "7,00 €"], ["ROTPUNKT A.S.D.", "14,00 €", "8,00 €"]]], ["p", "dal 01/12 al 31/12 il tesseramento è gratuito;"], ["p", "di essere il minore in possesso dell'idoneità psicofisica ed esente da malattie controindicate alla pratica sportiva;"], ["p", "di impegnarsi a produrre nel minor tempo possibile, dal momento dell’adesione alla Rotpunkt a.s.d., certificato medico di idoneità sportiva non agonistica in corso di validità;"], ["p", "di autorizzare l'eventuale tesseramento alla Federazione di Arrampicata Sportiva Italiana (F.A.S.I.);"], ["p", "DI ESSERE STATO INFORMATO CHE CON LA PRESENTE SI DIVENTA SOCIO Dl UN'ASSOCIAZIONE SPORTIVA DILETTANTISTICA SENZA SCOPO DI LUCRO."], ["p", "Data ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀ/ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ Firma: _______________________________"]],
+      "safeguarding": [["p", "_____________________________________________________________________________________________________RESPONSABILE SAFEGUARDING:"], ["p", "[Responsabile contro abusi, violenze e discriminazioni, con lo scopo di prevenire e contrastare ogni tipo di abuso, violenza e discriminazione sui tesserati nonché per garantire la protezione dell’integrità fisica e morale degli sportivi, anche ai sensi dell’art. 33, comma 6, del d.lgs. 36/2021] La Rotpunkt a.s.d. rende noto di aver nominato in data 25/06/2024 in qualità di Responsabile Safeguarding:"], ["p", "Lidia Maria Solavagione, e-mail: studiosolavagione@gmail.com"], ["p", "La Rotpunkt a.s.d. informa inoltre che il Modello Organizzativo e di Controllo (M.O.C) e il Codice di Condotta adottati sono disponibili online sul sito bigwallclimb.com e in forma cartacea nella bacheca sociale all’interno della palestra."], ["p", "___________________________________________________________________________________________________________________RISERVATO ALL' AMMINISTRAZIONE: Ammesso nella riunione del Consiglio direttivo del ............................. Iscritto a libro soci al N. …………………………. Cancellato nella riunione del Consiglio direttivo del …………………………."]],
+      "regolamento": [["p", "REGOLAMENTO BIG WALL CLIMB (palestra di arrampicata)"], ["p", "Per poter frequentare il centro è necessario essere tesserati alla FASI (Federazione Arrampicata Sportiva Italiana), aver consegnato certificato medico originale e in corso di validità e sottoscrivere il seguente regolamento interno. Premesso che l’arrampicata sportiva è uno sport potenzialmente pericoloso, è fatto obbligo a tutti i frequentatori di rispettare scrupolosamente le norme di seguito riportate."], ["p", "1) La pratica dell’arrampicata sportiva presso le strutture della palestra è consentita ai soci della Rotpunkt previa presa visione ed accettazione firmata del presente regolamento.2) L’accesso alle strutture è consentito solo durante gli orari d’apertura, questi ultimi verranno esposti internamente ai locali della struttura. L’accesso alla palestra è possibile solo se in possesso della tessera che verrà fornita dopo l’accettazione del presente regolamento. Detta tessera è personale e non cedibile.3) La gestione non fornisce il materiale tecnico individuale se non concordato preventivamente."], ["p", "Diritti Della Struttura"], ["p", "4) La palestra potrà, previo avviso apposto in bacheca, essere occasionalmente chiusa o parzialmente agibile senza che questo comporti una riduzione del contributo associativo.5) La gestione non assume la responsabilità per la custodia dei materiali e qualunque altro bene o effetto personale durante la permanenza degli utenti nei locali della palestra.6) E’ facoltà del personale responsabile allontanare dalla palestra chiunque si comporti in modo non ritenuto conforme a quanto previsto nel presente regolamento."], ["p", "Norme Comportamento Utenza"], ["p", "7) All’interno della palestra ogni frequentatore deve adottare un comportamento vigile, educato, responsabile e igienico al fine di evitare rischi per sé stesso e per gli altri. Si ricorda che, in caso di ferita sanguinante, è obbligatorio per ragioni igienico-sanitarie sospendere l’attività sportiva fino all’arresto dell’emorragia.8) E’ VIETATO CORRERE e svolgere qualsiasi attività incompatibile con l’arrampicata sportiva, è inoltre vietato fumare, introdurre animali ed utilizzare apparecchiature musicali.9) E’ VIETATO L’USO DI MAGNESITE IN POLVERE. E’ previsto il SOLO USO DI PALLINE “CHALK BALL” o magnesite liquida.10) Per l’uso di tutte le pareti di arrampicata è obbligatorio indossare scarpette d’arrampicata. Nelle altre zone della struttura è d’obbligo l’utilizzo di ciabatte pulite ed asciutte. L’abbigliamento dovrà essere idoneo (non è ammesso il torso nudo), evitando categoricamente la presenza di oggetti nelle tasche.11) Il posizionamento delle prese e la tracciatura dei percorsi è riservato al personale della palestra: qualsiasi necessità di ripristino o intervento tecnico dovrà essere segnalato al personale responsabile (appigli che girano etc.). 12) Negli orari di apertura sarà presente personale con funzioni di assistenza e sorveglianza. I frequentatori sono tenuti ad osservare quanto indicato dal personale responsabile al fine di garantire la massima sicurezza per la pratica dell’arrampicata.13) Vietato scalare utilizzando il telefonino. Si vieta l’uso di bracciali, anelli o collane che possano agganciarsi alla struttura ferendo l’utente."], ["p", "Minorenni"], ["p", "14) La sala boulder può essere frequentata autonomamente dai minori che hanno compiuto il sedicesimo anno di età. I minori che non hanno compiuto il sedicesimo anno di età potranno accedere alla sala boulder accompagnati e assistiti o da un adulto firmatario del presente regolamento oppure da un diverso accompagnatore che dovrà essere edotto del presente regolamento da parte del genitore firmatario.15) I ragazzi U11/13 non possono salire sopra i 3,0 mt di altezza, i ragazzi U15 non possono salire sopra i 3,5 mt di altezza e neppure usare gli attrezzi fitness."], ["p", "Regolamento Sala Boulder"], ["p", "16) E’ VIETATO SOSTARE SUI MATERASSI DI PROTEZIONE MENTRE ALTRI ARRAMPICATORI STANNO SCALANDO. La precedenza è di chi arrampica. Ove possibile si consiglia di parare e facilitare l’atterraggio corretto di chi arrampica, il personale è disponibile per un’eventuale assistenza."], ["t", [["Il sottoscritto …………………………………….………..……….……..… in qualità di responsabile di ………………………………..…………………..…… frequentatore\ndella struttura artificiale di arrampicata\nDICHIARA\nDi aver letto attentamente il presente regolamento e di accettarlo in ogni sua parte impegnandosi a rispettarlo integralmente ed assumendosi ogni responsabilità derivante dal mancato rispetto dello stesso. Di esonerare la Rotpunkt A.s.d., i legali rappresentanti ed il personale incaricato alla gestione da ogni responsabilità per infortuni ed incidenti che dovessero accadere durante l'utilizzo della struttura d'arrampicata o per accessori ad essa pertinenti in caso di mancato completo rispetto del presente regolamento. Dichiara di conoscere l'esistenza di rischi connessi all'attività dell'arrampicata sportiva e di accettarli integralmente e farsene totalmente carico. Dichiara di essere in possesso dei requisiti fisici e tecnici per la pratica dell'arrampicata sportiva e pertanto di esercitare la stessa in modo autonomo e non in regime di affidamento rispetto a chi gestisce la struttura. Il sottoscritto ribadisce di essere stato invitato a prendere attenta e specifica visione di quanto segue:1) obbligo e rispetto del regolamento 2) assunzione di responsabilità 3) accettazione del rischio 4) possesso dei requisiti fisici e tecnici.\nI vostri dati verranno usati esclusivamente da Rotpunkt A.s.d. per finalità amministrative: saranno conservati e trattati nel rispetto della Legge 679/2016 sulla Privacy.\nData:……../………./……………….. Firma per esteso…………………………………………………………………………………………."], [""]]]],
+      "informativa": INFORMATIVA,
+      "consensi": CONS_MINORE
+    },
+    "minorenne_fasi": {
+      "domanda": [["p", "IL SOTTOSCRITTO [GENITORE]"], ["p", "NOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ COGNOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "In qualità di GENITORE di:"], ["p", "NOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ COGNOME: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "SOCIETA’: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"], ["p", "NUMERO di TESSERA: ǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀǀ__ǀ"]].concat(REG_FASI).concat([["p", "DICHIARA, in qualità di genitore/responsabile del frequentatore (minorenne, su indicato) della struttura artificiale di arrampicata, di aver letto attentamente il presente regolamento e di accettarlo in ogni sua parte impegnandosi a rispettarlo integralmente ed assumendosi ogni responsabilità derivante dal mancato rispetto dello stesso. Di esonerare la Rotpunkt A.s.d., i legali rappresentanti ed il personale incaricato alla gestione da ogni responsabilità per infortuni ed incidenti che dovessero accadere durante l'utilizzo della struttura d'arrampicata o per accessori ad essa pertinenti in caso di mancato completo rispetto del presente regolamento. Dichiara di conoscere l'esistenza di rischi connessi all'attività dell'arrampicata sportiva e di accettarli integralmente e farsene totalmente carico. Dichiara che il minore è in possesso dei requisiti fisici e tecnici per la pratica dell'arrampicata sportiva e pertanto di esercitare la stessa in modo autonomo e non in regime di affidamento rispetto a chi gestisce la struttura."]]).concat(REG_FASI_CODA),
+      "safeguarding": SAFE_TAB,
+      "regolamento": [],
+      "informativa": INFORMATIVA,
+      "consensi": CONS_MINORE
+    }
+  };
+})();
 
-/* stampaModulo(p, loghi) → HTML della pagina dati del modulo, pronta da stampare (A5 orizzontale).
-   p = una riga della tabella preiscrizioni. loghi = { bigwall: urlImmagine, fasi: urlImmagine } (facoltativo). */
 function stampaModulo(p, loghi) {
   loghi = loghi || {};
+  var T = TESTI_MODULI[p.tipo_modulo] || TESTI_MODULI.maggiorenne;
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var testo = function (s) { return esc(s).replace(/_{8,}/g, '').replace(/\n/g, '<br>'); };
   var bx = function (t, n) { var s = String(t || '').toUpperCase(), h = '<span class="bx">'; for (var i = 0; i < Math.max(n, s.length); i++) h += '<i>' + esc(s.charAt(i)) + '</i>'; return h + '</span>'; };
   var lb = function (t) { return '<span class="lbl">' + t + ':</span>'; };
   var riga = function (parti) { return '<div class="riga">' + parti.map(function (x) { return lb(x[0]) + bx(x[1], x[2]); }).join('') + '</div>'; };
-  var data = function (iso) { var d = String(iso || '').split('-'); return lb('NATO IL') + bx(d[2], 2) + '/' + bx(d[1], 2) + '/' + bx(d[0], 4); };
+  var data = function (lbl, iso) { var d = String(iso || '').split('-'); return lb(lbl) + bx(d[2], 2) + '/' + bx(d[1], 2) + '/' + bx(d[0], 4); };
   var blocco = function (x, contatti) {
     x = x || {};
-    return riga([['NOME', x.nome, 13], ['COGNOME', x.cognome, 16]]) +
-      '<div class="riga">' + data(x.nascita) + lb('A') + bx(x.luogo, 18) + '</div>' +
+    return '<div class="dati">' + riga([['NOME', x.nome, 13], ['COGNOME', x.cognome, 16]]) +
+      '<div class="riga">' + data('NATO IL', x.nascita) + lb('A') + bx(x.luogo, 18) + '</div>' +
       riga([['PROV.', x.provn, 2], ['CODICE FISCALE', x.cf, 16]]) +
       riga([['INDIRIZZO', x.ind, 24], ['N°', x.civico, 4]]) +
       riga([['CAP', x.cap, 5], ['CITTA’', x.citta, 18], ['PROV.', x.prov, 2]]) +
-      (contatti ? riga([['E-MAIL', x.email, 27]]) + riga([['CELL.', x.cell, 13]]) : '');
+      (contatti ? riga([['E-MAIL', x.email, 27]]) + riga([['CELL.', x.cell, 13]]) : '') + '</div>';
   };
-  var c = p.consensi || {};
-  var cons = [[c.trattamento, 'al trattamento dei miei dati personali inclusi quelli considerati come categorie particolari di dati.'],
-    [c.comunicazione, 'alla comunicazione dei miei dati personali ad enti pubblici e società di natura privata per le finalità indicate nell’informativa.'],
-    [c.promozione, 'al trattamento dei dati personali per finalità di promozione della Rotpunkt a.s.d.']];
-  var h = '<div class="foglio"><header class="testa"><div class="ente"><b>ROTPUNKT A.S.D. - Big Wall Climb</b>' +
+  var nomeDi = function (x) { return x ? ((x.nome || '') + ' ' + (x.cognome || '')).trim() : ''; };
+  var c = p.consensi || {}, si = [c.trattamento, c.comunicazione, c.promozione], nc = 0;
+  var datiFatti = 0;
+  var titolo = /^(MODULO|IL SOTTOSCRITTO|In qualità di GENITORE|PRESA VISIONE|REGOLAMENTO|ROTPUNKT A\.S\.D\.$|PRIVACY POLICY|Artt\. 13|Diritti|Norme Comportamento|Minorenni$|Regolamento Sala|Trasferimenti Extra UE|Periodo di Conservazione|Categorie di Destinatari|\d\.\s?[A-Z]|\d\. [A-Z]|RESPONSABILE SAFEGUARDING)/;
+  var voce = function (x) {
+    if (x[0] === 't') {
+      var r = x[1];
+      if (/^Per tesseramento/.test(r[0][0] || '')) {
+        var h = '<table class="quote">';
+        r.forEach(function (row, i) {
+          if (row.length === 3) row = [row[0], '', row[1], row[2]];
+          h += '<tr>' + row.map(function (cell) { return (i ? '<td>' : '<th>') + testo(cell) + (i ? '</td>' : '</th>'); }).join('') + '</tr>';
+        });
+        var tipo = String(p.tipologia || '').toUpperCase();
+        return h + '</table>' + (tipo ? '<p class="nota">Tipologia di atleta scelta: <b>' + esc(tipo) + '</b></p>' : '');
+      }
+      var t = r.map(function (row) { return row.filter(Boolean).join('\n'); }).join('\n');
+      var dots = 0;
+      t = esc(t.replace(/\r/g, '')).replace(/[….]{6,}/g, function (m) {
+        dots++;
+        if (dots === 1) return '<b class="compilato">' + esc(nomeDi(/^minorenne/.test(p.tipo_modulo) ? p.genitore : p.socio)) + '</b>';
+        if (dots === 2 && /^minorenne/.test(p.tipo_modulo)) return '<b class="compilato">' + esc(nomeDi(p.socio)) + '</b>';
+        return m;
+      }).replace(/\n/g, '<br>').replace(/_{8,}/g, '');
+      return '<div class="box">' + t + '</div>';
+    }
+    var s = x[1];
+    if (/ǀ__ǀ/.test(s)) {
+      if (/^Data/.test(s)) return '<div class="firme"><span>Data ……/……/…………</span><span>' + esc(s.replace(/^Data[^A-Za-z]*/, '').replace(/[ǀ_\/]/g, '').trim() || 'Firma') + ' ……………………………………</span></div>';
+      if (/^SOCIETA/.test(s)) return riga([['SOCIETA’', p.societa, 28]]);
+      if (/^NUMERO di TESSERA/.test(s)) return riga([['NUMERO di TESSERA', p.tessera, 6]]);
+      if (/^NOME/.test(s)) { datiFatti++; return /^minorenne/.test(p.tipo_modulo) ? (datiFatti === 1 ? blocco(p.genitore, true) : blocco(p.socio, false)) : blocco(p.socio, true); }
+      return '';
+    }
+    if (/^◻/.test(s)) { var v = si[nc++]; return '<p class="cons">' + (v ? '☒' : '☐') + ' esprimo il consenso&nbsp;&nbsp; ' + (v ? '☐' : '☒') + ' NON esprimo il consenso ' + esc(s.replace(/^◻ esprimo il consenso ◻ NON esprimo il consenso /, '')) + '</p>'; }
+    if (/^Firma/.test(s) || /^Data:/.test(s)) return '<p class="firma">' + testo(s) + '</p>';
+    if (/^RISERVATO/.test(s)) return '<div class="box admin">' + testo(s.replace(/^_+/, '')) + '</div>';
+    var t2 = s.replace(/^_+/, '');
+    if (!t2) return '';
+    if (titolo.test(t2) && t2.length < 90) return '<p class="tit">' + testo(t2) + '</p>';
+    return '<p>' + testo(t2) + '</p>';
+  };
+  var parte = function (lista) { return lista.map(voce).join(''); };
+  var testa = '<header class="testa"><div class="ente"><b>ROTPUNKT A.S.D. - Big Wall Climb</b>' +
     ['Viale Garibaldi 24 p.1-2 Carmagnola TO', 'C.F.94072680013', 'Affiliazione F.A.S.I. n.24310', 'Tel. 01119116396', 'info@bigwallclimb.com', 'www.bigwallclimb.com'].map(function (r) { return '<span>' + r + '</span>'; }).join('') + '</div>' +
     (loghi.bigwall ? '<img src="' + esc(loghi.bigwall) + '" alt="">' : '') + '<b class="palestra">PALESTRA E SCUOLA DI ARRAMPICATA</b>' +
     (loghi.fasi ? '<img class="fasi" src="' + esc(loghi.fasi) + '" alt="">' : '') + '</header>';
-  if (p.tipo_modulo === 'minorenne') {
-    h += '<h3>MODULO DOMANDA DI AMMISSIONE SOCIO MINORENNE</h3><p class="dx">Al Consiglio Direttivo della Associazione</p>' +
-      '<p class="tit">IL SOTTOSCRITTO [GENITORE]</p>' + blocco(p.genitore, true) +
-      '<p class="tit">In qualità di GENITORE di:</p>' + blocco(p.socio, false) +
-      '<p class="txt">condividendo gli scopi e lo statuto della ROTPUNKT A.S.D. CHIEDE che questi sia ammesso in qualità di socio alla ROTPUNKT A.S.D. (dichiarazioni complete nel modulo). Tipologia di atleta: ' + esc(String(p.tipologia || '').toUpperCase()) + '.</p>';
-  } else if (p.tipo_modulo === 'maggiorenne') {
-    h += '<h3>MODULO DOMANDA DI AMMISSIONE SOCIO MAGGIORENNE</h3><p class="dx">Al Consiglio Direttivo della Associazione</p>' +
-      '<p class="tit">IL SOTTOSCRITTO</p>' + blocco(p.socio, true) +
-      '<p class="txt">condividendo gli scopi e lo statuto della ROTPUNKT A.S.D., manifestata la volontà di adesione, CHIEDE di essere ammesso in qualità di socio alla ROTPUNKT A.S.D. (dichiarazioni complete nel modulo). Tipologia di atleta: ' + esc(String(p.tipologia || '').toUpperCase()) + '.</p>';
-  } else {
-    h += '<p class="tit">IL SOTTOSCRITTO</p>' + blocco(p.socio, true) + riga([['SOCIETA’', p.societa, 28]]) + riga([['NUMERO di TESSERA', p.tessera, 6]]) +
-      '<p class="txt">PRESA VISIONE DEL REGOLAMENTO (testo completo nel modulo).</p>';
-  }
-  h += '<p class="txt">Alla luce dell’informativa ricevuta:</p><ul class="cons">' + cons.map(function (x) {
-    return '<li>' + (x[0] ? '☒' : '☐') + ' esprimo il consenso  ' + (x[0] ? '☐' : '☒') + ' NON esprimo il consenso ' + x[1] + '</li>';
-  }).join('') + '</ul>';
-  h += '<p class="nota">Sede: ' + esc(p.sede) + ' · Attività: ' + esc(p.attivita) + ' · Certificato medico: ' + (p.certificato === 'caricato' ? 'caricato online' : 'da consegnare in palestra') +
-    ' · Pre-iscrizione ' + esc(p.codice) + ' del ' + new Date(p.creata).toLocaleDateString('it-IT') + '</p>';
-  h += '<div class="firme"><span>Data ……/……/…………</span>' + (p.tipo_modulo === 'minorenne'
-    ? '<span>Firma (Genitore 1) ……………………</span><span>Firma (Genitore 2) ……………………</span>'
-    : '<span>Firma per esteso ……………………………</span>') + '</div></div>';
+  var piede = '<p class="piede">Pre-iscrizione ' + esc(p.codice) + ' del ' + new Date(p.creata).toLocaleDateString('it-IT') + ' · Sede: ' + esc(p.sede) + ' · Attività: ' + esc(p.attivita) +
+    ' · Certificato medico: ' + (p.certificato === 'caricato' ? 'caricato online' : 'da consegnare') + '</p>';
+  /* un solo foglio A4 fronte: dati, dichiarazioni, consensi e firme. Regolamento e informativa completi
+     restano stampati in palestra (allegati al modulo); il testo del regolamento nel modulo FASI si sostituisce con il rimando. */
+  var dom = [], salta = false;
+  T.domanda.forEach(function (x) {
+    var s = x[0] === 'p' ? x[1] : '';
+    if (/^PRESA VISIONE/.test(s)) { dom.push(['p', 'PRESA VISIONE DEL REGOLAMENTO DELLA PALESTRA (allegato al presente modulo).']); salta = true; return; }
+    if (salta && /^DICHIARA/.test(s)) salta = false;
+    if (!salta) dom.push(x);
+  });
+  var cons = T.consensi.filter(function (x) { return !/^Carmagnola, lì/.test(x[1]); }).map(function (x) {
+    return /^Io sottoscritto\/a dichiaro di aver ricevuto/.test(x[1]) ? ['p', 'Io sottoscritto/a dichiaro di aver ricevuto l’informativa privacy (allegata al presente modulo) e, alla luce di essa:'] : x;
+  }).filter(function (x) { return !/^Io sottoscritto\/a alla luce/.test(x[1]); });
+  var h = '<div class="foglio uno"><section class="pag">' + testa + parte(dom) +
+    '<div class="consensi">' + parte(cons) + '</div>' +
+    '<p class="allegati">Allegati, consegnati in palestra: regolamento della palestra, informativa privacy, Safeguarding (M.O.C. e Codice di condotta).</p>' +
+    '<p class="admin-riga">RISERVATO ALL’AMMINISTRAZIONE: ammesso nella riunione del Consiglio direttivo del ……………… · Libro soci N. ……………</p>' +
+    piede + '</section></div>';
   return h;
 }
 
+function testoModulo(tipo, quale) {
+  var T = TESTI_MODULI[tipo] || TESTI_MODULI.maggiorenne;
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }).replace(/_{8,}/g, '').replace(/\n/g, '<br>'); };
+  var lista = quale === 'informativa' ? T.informativa : (T.regolamento.length ? T.regolamento : T.domanda.filter(function (x, i, a) {
+    var k = a.findIndex(function (y) { return y[0] === 'p' && /^PRESA VISIONE/.test(y[1]); }); return k >= 0 && i >= k && !/ǀ__ǀ|^Data/.test(x[1]);
+  }));
+  return lista.map(function (x) {
+    if (x[0] === 't') return '<p>' + esc(x[1].map(function (r) { return r.filter(Boolean).join(' '); }).join(' ')) + '</p>';
+    return x[1].replace(/_/g, '') ? '<p>' + esc(x[1]) + '</p>' : '';
+  }).join('');
+}
+
 var CSS_MODULO = [
-  '@page { size: A5 landscape; margin: 8mm; }',
-  '.foglio { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; background: #fff; }',
-  '.foglio .testa { display: flex; align-items: center; gap: 18px; padding-bottom: 8px; margin-bottom: 10px; }',
-  '.foglio .testa img { height: 56px; width: auto; } .foglio .testa img.fasi { height: 50px; margin-left: auto; }',
-  '.foglio .ente { display: grid; font-size: 10px; line-height: 1.3; } .foglio .ente b { font-size: 11px; }',
-  '.foglio .palestra { font-size: 14px; line-height: 1.1; max-width: 140px; font-weight: 900; }',
-  '.foglio h3 { font-size: 13px; text-align: center; text-decoration: underline; margin: 4px 0 2px; }',
-  '.foglio .dx { text-align: right; font-style: italic; margin: 0 0 6px; }',
-  '.foglio .tit { font-weight: 700; text-decoration: underline; margin: 8px 0 5px; }',
-  '.foglio .txt { margin: 8px 0 3px; } .foglio .nota { margin: 10px 0 0; font-size: 9.5px; color: #444; }',
-  '.foglio .riga { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; margin: 0 0 5px; }',
-  '.foglio .lbl { font-weight: 700; font-size: 10px; white-space: nowrap; }',
-  '.foglio .bx { display: inline-flex; } .foglio .bx i { font-style: normal; width: 14px; height: 18px; border: 1px solid #333; margin-left: -1px; display: inline-flex; align-items: center; justify-content: center; font-family: "Courier New", monospace; font-size: 11px; font-weight: 700; }',
-  '.foglio .cons { list-style: none; padding: 0; margin: 3px 0 0; display: grid; gap: 4px; }',
-  '.foglio .firme { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-top: 28px; }'
+  '@page { size: A4 portrait; margin: 9mm 12mm; }',
+  '.foglio { font-family: Arial, Helvetica, sans-serif; font-size: 8.9pt; line-height: 1.26; color: #111; background: #fff; }',
+  '.foglio .pag { break-after: page; page-break-after: always; }',
+  '.foglio .pag:last-child { break-after: auto; page-break-after: auto; }',
+  '.foglio p { margin: 0 0 3px; text-align: justify; }',
+  '.foglio .pag.reg { font-size: 8.5pt; } .foglio .pag.priv { font-size: 8.1pt; line-height: 1.22; }',
+  '.foglio .tit { font-weight: 700; margin: 8px 0 3px; text-align: left; }',
+  '.foglio .testa { display: flex; align-items: center; gap: 16px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid #999; }',
+  '.foglio .testa img { height: 46px; width: auto; } .foglio .testa img.fasi { height: 46px; margin-left: auto; }',
+  '.foglio .ente { display: grid; font-size: 8.5pt; line-height: 1.25; } .foglio .ente b { font-size: 9.5pt; }',
+  '.foglio .palestra { font-size: 12pt; line-height: 1.1; max-width: 130px; font-weight: 900; }',
+  '.foglio .dati { margin: 4px 0 8px; }',
+  '.foglio .riga { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; margin: 0 0 4px; }',
+  '.foglio .lbl { font-weight: 700; font-size: 8.5pt; white-space: nowrap; }',
+  '.foglio .bx { display: inline-flex; } .foglio .bx i { font-style: normal; width: 12.5px; height: 16px; border: 1px solid #333; margin-left: -1px; display: inline-flex; align-items: center; justify-content: center; font-family: "Courier New", monospace; font-size: 9.5pt; font-weight: 700; }',
+  '.foglio .quote { border-collapse: collapse; margin: 4px 0 6px; font-size: 8.8pt; } .foglio .quote th, .foglio .quote td { border: 1px solid #555; padding: 2px 8px; text-align: left; }',
+  '.foglio .nota { font-size: 8.8pt; }',
+  '.foglio .box { border: 1px solid #555; padding: 5px 8px; margin: 6px 0; font-size: 8.2pt; text-align: justify; }',
+  '.foglio .box.admin { border-style: dashed; }',
+  '.foglio .compilato { font-family: "Courier New", monospace; text-transform: uppercase; }',
+  '.foglio .firme { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin: 12px 0 6px; }',
+  '.foglio .firma { margin-top: 12px; text-align: left; }',
+  '.foglio .cons { text-align: left; margin: 3px 0; }',
+  '.foglio .consensi { margin-top: 10px; border-top: 1px solid #999; padding-top: 8px; }',
+  '.foglio .piede { margin-top: 6px; font-size: 7.5pt; color: #444; text-align: left; }',
+  '.foglio.uno { font-size: 8.4pt; line-height: 1.2; } .foglio.uno p { margin: 0 0 2px; } .foglio.uno .tit { margin: 5px 0 2px; }',
+  '.foglio.uno .dati { margin: 2px 0 4px; } .foglio.uno .riga { margin: 0 0 2.5px; } .foglio.uno .firme { margin: 8px 0 4px; } .foglio.uno .firma { margin-top: 10px; }',
+  '.foglio.uno .consensi { margin-top: 6px; padding-top: 5px; } .foglio.uno .quote { margin: 2px 0 3px; font-size: 8pt; } .foglio.uno .quote th, .foglio.uno .quote td { padding: 1px 6px; }',
+  '.foglio .allegati { margin-top: 6px; font-size: 8pt; font-style: italic; } .foglio .admin-riga { margin-top: 4px; font-size: 7.8pt; border-top: 1px dashed #999; padding-top: 3px; }'
 ].join('\n');
 
-/* Stampa: apre una finestra con il modulo e lancia la stampa. */
+/* Stampa: apre una finestra con il modulo e lancia la stampa.
+   Torna false se il browser ha bloccato la finestra, cosi' la pagina lo puo' dire. */
 function stampaPreiscrizione(p, loghi) {
   var w = window.open('', '_blank');
   if (!w) return false;
@@ -11469,9 +11596,8 @@ function stampaPreiscrizione(p, loghi) {
   w.onload = function () { w.focus(); w.print(); };
   return true;
 }
-
 /* l'SQL della tabella, su misura dell'account collegato */
-const SQL_PRE_BASE = "-- Pre-iscrizioni: da eseguire una volta in Supabase (SQL editor).\n-- Dati personali: il progetto deve stare in una regione dell'UE.\n\ncreate table if not exists preiscrizioni (\n  id uuid primary key default gen_random_uuid(),\n  codice text unique not null,              -- PR-xxxxxx, lo vede il socio\n  creata timestamptz not null default now(),\n  stagione text not null,                   -- es. '2026-27'\n  tipo_modulo text not null check (tipo_modulo in ('maggiorenne','maggiorenne_fasi','minorenne')),\n  sede text not null check (sede in ('Carmagnola','Alba')),\n  attivita text,\n  socio jsonb not null,\n  genitore jsonb,\n  societa text, tessera text,\n  tipologia text check (tipologia in ('Amatore','Agonista')),\n  consensi jsonb not null,\n  regolamento boolean not null,\n  certificato text check (certificato in ('porto','caricato')),\n  stato text not null default 'nuova' check (stato in ('nuova','stampata','firmata','annullata')),\n  stampata_il timestamptz,\n  firmata_il timestamptz,\n  note text\n);\nalter table preiscrizioni enable row level security;\n\n-- il sito puo' solo inserire: non legge niente\ndrop policy if exists \"sito inserisce\" on preiscrizioni;\ncreate policy \"sito inserisce\" on preiscrizioni\n  for insert to anon\n  with check (stato = 'nuova' and regolamento and (consensi->>'trattamento')::boolean);\n\n-- la segreteria legge, aggiorna e cancella\ndrop policy if exists \"segreteria\" on preiscrizioni;\ncreate policy \"segreteria\" on preiscrizioni\n  for all to authenticated\n  using (auth.uid()::text = '@UID@')\n  with check (auth.uid()::text = '@UID@');\n\ncreate index if not exists preiscrizioni_stato_creata on preiscrizioni (stato, creata desc);";
+const SQL_PRE_BASE = "-- Pre-iscrizioni: da eseguire una volta in Supabase (SQL editor).\n-- Dati personali: il progetto deve stare in una regione dell'UE.\n\ncreate table if not exists preiscrizioni (\n  id uuid primary key default gen_random_uuid(),\n  codice text unique not null,              -- PR-xxxxxx, lo vede il socio\n  creata timestamptz not null default now(),\n  stagione text not null,                   -- es. '2026-27'\n  tipo_modulo text not null check (tipo_modulo in ('maggiorenne','maggiorenne_fasi','minorenne','minorenne_fasi')),\n  sede text not null check (sede in ('Carmagnola','Alba')),\n  attivita text,\n  socio jsonb not null,\n  genitore jsonb,\n  societa text, tessera text,\n  tipologia text check (tipologia in ('Amatore','Agonista')),\n  consensi jsonb not null,\n  regolamento boolean not null,\n  certificato text check (certificato in ('porto','caricato')),\n  stato text not null default 'nuova' check (stato in ('nuova','stampata','firmata','annullata')),\n  stampata_il timestamptz,\n  firmata_il timestamptz,\n  note text\n);\nalter table preiscrizioni enable row level security;\n\n-- il sito puo' solo inserire: non legge niente\ndrop policy if exists \"sito inserisce\" on preiscrizioni;\ncreate policy \"sito inserisce\" on preiscrizioni\n  for insert to anon\n  with check (stato = 'nuova' and regolamento and (consensi->>'trattamento')::boolean);\n\n-- la segreteria legge, aggiorna e cancella\ndrop policy if exists \"segreteria\" on preiscrizioni;\ncreate policy \"segreteria\" on preiscrizioni\n  for all to authenticated\n  using (auth.uid()::text = '@UID@')\n  with check (auth.uid()::text = '@UID@');\n\ncreate index if not exists preiscrizioni_stato_creata on preiscrizioni (stato, creata desc);\n\n-- se la tabella esisteva gia', allarga il controllo al quarto tipo di modulo\nalter table public.preiscrizioni drop constraint if exists preiscrizioni_tipo_modulo_check;\nalter table public.preiscrizioni add constraint preiscrizioni_tipo_modulo_check\n  check (tipo_modulo in ('maggiorenne','maggiorenne_fasi','minorenne','minorenne_fasi'));";
 function sqlPreiscrizioni(uid) {
   return SQL_PRE_BASE.split('@UID@').join(uid || UID_SEGNAPOSTO);
 }
