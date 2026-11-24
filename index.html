@@ -1208,7 +1208,7 @@ function pushBackup(dataObj) {
 }
 /* numero di versione: compare accanto al titolo, serve a capire al volo se il
    file aperto e' quello aggiornato */
-const VERSIONE = 'v2.8';
+const VERSIONE = 'v3.0';
 const DEVICE_NAME_KEY = 'palestra_turni_device_name';
 const ME_KEY = 'palestra_turni_me'; // collaboratore di questo dispositivo, per la vista "i miei turni"
 const SOLOMIE_KEY = 'palestra_turni_solo_mie'; // interruttore fra i propri turni e tutti
@@ -4956,7 +4956,8 @@ function App() {
       let q = c.from('preiscrizioni').select('*').order('creata', {
         ascending: false
       }).limit(500);
-      if (f.sede) q = q.eq('sede', f.sede);
+      /* le righe senza sede devono comparire sempre: il sito non la manda piu' */
+      if (f.sede) q = q.or('sede.eq.' + f.sede + ',sede.is.null');
       if (f.stato) q = q.eq('stato', f.stato);
       const r = await q;
       if (r && r.error) throw r.error;
@@ -11150,6 +11151,10 @@ function PreiscrizioniPanel({
     const s = r.socio || {};
     return String(r.codice || '').toLowerCase().indexOf(q) >= 0 || String(s.cognome || '').toLowerCase().indexOf(q) >= 0 || String(s.nome || '').toLowerCase().indexOf(q) >= 0;
   });
+  /* sede, attivita' e tipologia il sito non le manda piu': le colonne
+     compaiono solo se almeno una riga ce le ha davvero */
+  const conSede = righe.some(r => String(r.sede || '').trim());
+  const conAttivita = righe.some(r => String(r.attivita || '').trim());
   const quante = st => righe.filter(r => r.stato === st).length;
   const aperta = righe.find(r => r.id === apertaId) || null;
   const segna = async (r, nuovo) => {
@@ -11331,7 +11336,7 @@ function PreiscrizioniPanel({
     placeholder: "Cerca per cognome o codice (PR-…)",
     value: cerca,
     onChange: e => setCerca(e.target.value)
-  }), /*#__PURE__*/React.createElement("select", {
+  }), (conSede || sede) && /*#__PURE__*/React.createElement("select", {
     className: "txt",
     style: {
       width: 150
@@ -11357,10 +11362,10 @@ function PreiscrizioniPanel({
     className: "roster-scroll"
   }, /*#__PURE__*/React.createElement("table", {
     className: "rep"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Arrivata', 'Codice', 'Socio', 'Modulo', 'Sede', 'Attività', 'Stato', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Arrivata', 'Codice', 'Socio', 'Modulo'].concat(conSede ? ['Sede'] : []).concat(conAttivita ? ['Attività'] : []).concat(['Stato', '']).map((h, i) => /*#__PURE__*/React.createElement("th", {
     key: i
   }, h)))), /*#__PURE__*/React.createElement("tbody", null, viste.length === 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
-    colSpan: 8,
+    colSpan: 6 + (conSede ? 1 : 0) + (conAttivita ? 1 : 0),
     className: "empty"
   }, carico ? 'Sto leggendo…' : q ? 'Nessuna pre-iscrizione con questo cognome o codice.' : 'Nessuna pre-iscrizione.')), viste.map(r => /*#__PURE__*/React.createElement("tr", {
     key: r.id,
@@ -11371,9 +11376,9 @@ function PreiscrizioniPanel({
     className: "tiny"
   }, dataPre(r.creata)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("b", null, r.codice)), /*#__PURE__*/React.createElement("td", null, nomePre(r)), /*#__PURE__*/React.createElement("td", {
     className: "tiny"
-  }, TIPI_PRE[r.tipo_modulo] || r.tipo_modulo), /*#__PURE__*/React.createElement("td", {
+  }, TIPI_PRE[r.tipo_modulo] || r.tipo_modulo), conSede && /*#__PURE__*/React.createElement("td", {
     className: "tiny"
-  }, r.sede), /*#__PURE__*/React.createElement("td", {
+  }, r.sede || '—'), conAttivita && /*#__PURE__*/React.createElement("td", {
     className: "tiny"
   }, r.attivita || '—'), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
     className: 'pre-chip pc-' + r.stato
@@ -11701,7 +11706,7 @@ function stampaModulo(p, loghi) {
     ['Viale Garibaldi 24 p.1-2 Carmagnola TO', 'C.F.94072680013', 'Affiliazione F.A.S.I. n.24310', 'Tel. 01119116396', 'info@bigwallclimb.com', 'www.bigwallclimb.com'].map(function (r) { return '<span>' + r + '</span>'; }).join('') + '</div>' +
     (loghi.bigwall ? '<img src="' + esc(loghi.bigwall) + '" alt="">' : '') + '<b class="palestra">PALESTRA E SCUOLA DI ARRAMPICATA</b>' +
     (loghi.fasi ? '<img class="fasi" src="' + esc(loghi.fasi) + '" alt="">' : '') + '</header>';
-  var piede = '<p class="piede">Pre-iscrizione ' + esc(p.codice) + ' del ' + new Date(p.creata).toLocaleDateString('it-IT') + ' · Sede: ' + esc(p.sede) + ' · Attività: ' + esc(p.attivita) +
+  var piede = '<p class="piede">Pre-iscrizione ' + esc(p.codice) + ' del ' + new Date(p.creata).toLocaleDateString('it-IT') + (p.sede ? ' · Sede: ' + esc(p.sede) : '') + (p.attivita ? ' · Attività: ' + esc(p.attivita) : '') +
     ' · Certificato medico: ' + (p.certificato === 'caricato' ? 'caricato online' : 'da consegnare') + '</p>';
   /* un solo foglio A4 fronte: dati, dichiarazioni, consensi e firme. Regolamento e informativa completi
      restano stampati in palestra (allegati al modulo); il testo del regolamento nel modulo FASI si sostituisce con il rimando. */
@@ -11778,7 +11783,7 @@ function stampaPreiscrizione(p, loghi) {
   return true;
 }
 /* l'SQL della tabella, su misura dell'account collegato */
-const SQL_PRE_BASE = "-- Pre-iscrizioni: da eseguire una volta in Supabase (SQL editor).\n-- Dati personali: il progetto deve stare in una regione dell'UE.\n\ncreate table if not exists preiscrizioni (\n  id uuid primary key default gen_random_uuid(),\n  codice text unique not null,              -- PR-xxxxxx, lo vede il socio\n  creata timestamptz not null default now(),\n  stagione text not null,                   -- es. '2026-27'\n  tipo_modulo text not null check (tipo_modulo in ('maggiorenne','maggiorenne_fasi','minorenne','minorenne_fasi')),\n  sede text not null check (sede in ('Carmagnola','Alba')),\n  attivita text,\n  socio jsonb not null,\n  genitore jsonb,\n  societa text, tessera text,\n  tipologia text check (tipologia in ('Amatore','Agonista')),\n  consensi jsonb not null,\n  regolamento boolean not null,\n  certificato text check (certificato in ('porto','caricato')),\n  stato text not null default 'nuova' check (stato in ('nuova','stampata','firmata','annullata')),\n  stampata_il timestamptz,\n  firmata_il timestamptz,\n  note text\n);\nalter table preiscrizioni enable row level security;\n\n-- il sito puo' solo inserire: non legge niente\ndrop policy if exists \"sito inserisce\" on preiscrizioni;\ncreate policy \"sito inserisce\" on preiscrizioni\n  for insert to anon\n  with check (stato = 'nuova' and regolamento and (consensi->>'trattamento')::boolean);\n\n-- la segreteria legge, aggiorna e cancella\ndrop policy if exists \"segreteria\" on preiscrizioni;\ncreate policy \"segreteria\" on preiscrizioni\n  for all to authenticated\n  using (auth.uid()::text = '@UID@')\n  with check (auth.uid()::text = '@UID@');\n\ncreate index if not exists preiscrizioni_stato_creata on preiscrizioni (stato, creata desc);\n\n-- se la tabella esisteva gia', allarga il controllo al quarto tipo di modulo\nalter table public.preiscrizioni drop constraint if exists preiscrizioni_tipo_modulo_check;\nalter table public.preiscrizioni add constraint preiscrizioni_tipo_modulo_check\n  check (tipo_modulo in ('maggiorenne','maggiorenne_fasi','minorenne','minorenne_fasi'));";
+const SQL_PRE_BASE = "-- Pre-iscrizioni: da eseguire una volta in Supabase (SQL editor).\n-- Dati personali: il progetto deve stare in una regione dell'UE.\n\ncreate table if not exists preiscrizioni (\n  id uuid primary key default gen_random_uuid(),\n  codice text unique not null,              -- PR-xxxxxx, lo vede il socio\n  creata timestamptz not null default now(),\n  stagione text not null,                   -- es. '2026-27'\n  tipo_modulo text not null check (tipo_modulo in ('maggiorenne','maggiorenne_fasi','minorenne','minorenne_fasi')),\n  sede text check (sede in ('Carmagnola','Alba')),\n  attivita text,\n  socio jsonb not null,\n  genitore jsonb,\n  societa text, tessera text,\n  tipologia text check (tipologia in ('Amatore','Agonista')),\n  consensi jsonb not null,\n  regolamento boolean not null,\n  certificato text check (certificato in ('porto','caricato')),\n  stato text not null default 'nuova' check (stato in ('nuova','stampata','firmata','annullata')),\n  stampata_il timestamptz,\n  firmata_il timestamptz,\n  note text\n);\nalter table preiscrizioni enable row level security;\n\n-- il sito puo' solo inserire: non legge niente\ndrop policy if exists \"sito inserisce\" on preiscrizioni;\ncreate policy \"sito inserisce\" on preiscrizioni\n  for insert to anon\n  with check (stato = 'nuova' and regolamento and (consensi->>'trattamento')::boolean);\n\n-- la segreteria legge, aggiorna e cancella\ndrop policy if exists \"segreteria\" on preiscrizioni;\ncreate policy \"segreteria\" on preiscrizioni\n  for all to authenticated\n  using (auth.uid()::text = '@UID@')\n  with check (auth.uid()::text = '@UID@');\n\ncreate index if not exists preiscrizioni_stato_creata on preiscrizioni (stato, creata desc);\n\n-- se la tabella esisteva gia': sede libera e quarto tipo di modulo\nalter table public.preiscrizioni alter column sede drop not null;\nalter table public.preiscrizioni drop constraint if exists preiscrizioni_tipo_modulo_check;\nalter table public.preiscrizioni add constraint preiscrizioni_tipo_modulo_check\n  check (tipo_modulo in ('maggiorenne','maggiorenne_fasi','minorenne','minorenne_fasi'));";
 function sqlPreiscrizioni(uid) {
   return SQL_PRE_BASE.split('@UID@').join(uid || UID_SEGNAPOSTO);
 }
@@ -20041,9 +20046,12 @@ function TrackingPanel({
     const pr = (data.settings || {}).trackingPair || {};
     return [pr.dayA != null ? Number(pr.dayA) : 3, pr.dayB != null ? Number(pr.dayB) : 4];
   };
-  /* Cambiando il tracciatore di una settimana i due si scambiano i ruoli: la
-     giornata di tracciatura si sposta nel giorno di chi traccia e il turno di
-     lavaggio prese e pulizie in quello dell'altro, come all'inizio del ciclo. */
+  /* Cambiando il tracciatore di una giornata i due si scambiano le attivita',
+     restando ognuno nel giorno che ha nel ciclo: a chi ho indicato come
+     tracciatore vanno tracciatura e smontaggio prese, nel suo giorno; all'altro
+     il lavaggio prese e le pulizie di quella settimana, nel suo. Ogni turno si
+     tiene l'orario che aveva gia'; se quella settimana il turno di pulizie non
+     c'e' ancora, viene creato con l'orario fisso della coppia. */
   const scambiaRuoli = (nd, tid, ids) => {
     const t = (nd.trackings || []).find(x => x.id === tid);
     if (!t) return;
@@ -20070,7 +20078,26 @@ function TrackingPanel({
          che la tracciatura lascia libero */
       spostaOreCoperte(nd, rowsOf(t), t.date, dataTrac);
     }
-    if (!pul) return;
+    if (!pul) {
+      /* quella settimana non ha ancora il suo turno: lo scrivo adesso, nel
+         giorno dell'altro, con l'orario e le ore di lavaggio della coppia */
+      if (occupata || (nd.cleanShifts || []).some(x => x.date === dataPul && x.collabId === altro)) return;
+      const pr = (data.settings || {}).trackingPair || {};
+      nd.cleanShifts = [...(nd.cleanShifts || []), {
+        id: uid(),
+        date: dataPul,
+        collabId: altro,
+        start: pr.start || '09:00',
+        end: pr.end || '14:00',
+        washH: pr.washH != null ? pr.washH : 1,
+        tasks: [],
+        kind: 'settimanale',
+        pairTrack: t.id,
+        pairPeers: peers,
+        pairDays: gg
+      }];
+      return;
+    }
     const pulOccupata = dataPul !== pul.date && (nd.cleanShifts || []).some(x => x.id !== pul.id && x.date === dataPul && x.collabId === altro);
     const nuovaData = dataPul !== pul.date && !pulOccupata && !occupata ? dataPul : pul.date;
     if (pul.collabId === altro && nuovaData === pul.date) return;
@@ -21319,7 +21346,7 @@ function TrackingPanel({
         style: {
           marginTop: 3
         },
-        title: "Nella coppia alternata chi non traccia lava le prese e pulisce: cambiando il tracciatore i due si scambiano i ruoli e ognuno torna nel suo giorno"
+        title: "Nella coppia alternata chi non traccia lava le prese e pulisce: cambiando il tracciatore i due si scambiano le attivita' e ognuno resta nel suo giorno, con l'orario che aveva"
       }, "pulizie: ", /*#__PURE__*/React.createElement("b", null, collName(pul.collabId) || '\u2014'), " \u00b7 ", DAYS_SHORT[(parseISO(pul.date).getDay() + 6) % 7], " ", parseISO(pul.date).toLocaleDateString('it-IT', {
         day: 'numeric',
         month: 'short'
