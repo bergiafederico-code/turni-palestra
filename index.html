@@ -1208,7 +1208,7 @@ function pushBackup(dataObj) {
 }
 /* numero di versione: compare accanto al titolo, serve a capire al volo se il
    file aperto e' quello aggiornato */
-const VERSIONE = 'v3.0';
+const VERSIONE = 'v3.1';
 const DEVICE_NAME_KEY = 'palestra_turni_device_name';
 const ME_KEY = 'palestra_turni_me'; // collaboratore di questo dispositivo, per la vista "i miei turni"
 const SOLOMIE_KEY = 'palestra_turni_solo_mie'; // interruttore fra i propri turni e tutti
@@ -22389,6 +22389,21 @@ function CleaningPanel({
       }));
     });
   };
+  /* correggere a mano un turno: la data e chi lo fa. Per quelli nati
+     dall'alternanza di tracciatura si sceglie solo fra i due della coppia,
+     cosi' non si rompe il giro. */
+  const setTurno = (id, patch) => upd(nd => {
+    nd.cleanShifts = (nd.cleanShifts || []).map(x => x.id === id ? {
+      ...x,
+      ...patch
+    } : x);
+  });
+  const scelteDi = s => {
+    const p = (s.pairPeers || []).filter(Boolean);
+    const dentro = p.length === 2 ? collabs.filter(c => p.indexOf(c.id) !== -1) : [];
+    if (dentro.length === 2) return dentro;
+    return collabs;
+  };
   const setShiftZones = (id, lista) => upd(nd => {
     nd.cleanShifts = (nd.cleanShifts || []).map(x => x.id === id ? {
       ...x,
@@ -23460,7 +23475,12 @@ function CleaningPanel({
     style: {
       marginLeft: 8
     }
-  }, contaCiclo(), " giornate"))), elencoTurni.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, contaCiclo(), " giornate"))), canEdit && elencoTurni.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "tiny muted",
+    style: {
+      marginTop: 8
+    }
+  }, "La data e chi lo fa si correggono qui, sulla riga del turno. Per i turni nati dall\u2019alternanza di tracciatura si sceglie fra i due della coppia."), elencoTurni.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "empty"
   }, shifts.length && !vecchie ? 'Nessuna giornata da oggi in avanti: spunta \u201cmostra anche quelle passate\u201d per rivedere le altre.' : giornaliere ? 'Nessuna giornata in programma: creale qui sopra.' : 'Nessun turno: si creano con il ciclo settimanale o dall\u2019alternanza di tracciatura.') : /*#__PURE__*/React.createElement("div", {
     className: "isc-scroll"
@@ -23471,11 +23491,30 @@ function CleaningPanel({
     const usati = minutiUsati(s);
     return /*#__PURE__*/React.createElement("tr", {
       key: s.id
-    }, /*#__PURE__*/React.createElement("td", null, parseISO(s.date).toLocaleDateString('it-IT', {
+    }, /*#__PURE__*/React.createElement("td", null, canEdit ? /*#__PURE__*/React.createElement("input", {
+      className: "txt",
+      type: "date",
+      style: {
+        width: 145
+      },
+      value: s.date || '',
+      onChange: e => setTurno(s.id, {
+        date: e.target.value
+      })
+    }) : parseISO(s.date).toLocaleDateString('it-IT', {
       weekday: 'short',
       day: 'numeric',
       month: 'short'
-    })), /*#__PURE__*/React.createElement("td", null, collName(s.collabId)), /*#__PURE__*/React.createElement("td", {
+    })), /*#__PURE__*/React.createElement("td", null, canEdit ? /*#__PURE__*/React.createElement("select", {
+      className: "we-sel",
+      value: s.collabId || '',
+      onChange: e => setTurno(s.id, {
+        collabId: e.target.value
+      })
+    }, scelteDi(s).map(cl => /*#__PURE__*/React.createElement("option", {
+      key: cl.id,
+      value: cl.id
+    }, cl.name))) : collName(s.collabId)), /*#__PURE__*/React.createElement("td", {
       className: "tiny"
     }, giornaliere ? /*#__PURE__*/React.createElement("span", {
       className: "mono"
